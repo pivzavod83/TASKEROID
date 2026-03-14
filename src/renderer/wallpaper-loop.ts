@@ -8,6 +8,7 @@ import {
   createAsteroidMesh,
   updateAsteroidPosition,
   getResponsiveMaxRadius,
+  updateAsteroidForImportance,
   AsteroidMesh,
 } from './wallpaper-scene';
 import { Task } from '../models/task';
@@ -37,17 +38,10 @@ let hoveredAsteroid: AsteroidMesh | null = null;
 let hoveredPlanet = false;
 let asteroidEditPopup: HTMLDivElement | null = null;
 let asteroidEditBackdrop: HTMLDivElement | null = null;
+let planetScaleCurrent = 1;
 
 const HOVER_SCALE = 1.12;
-
-function isPartOfPlanet(obj: THREE.Object3D): boolean {
-  let o: THREE.Object3D | null = obj;
-  while (o) {
-    if (o === planet) return true;
-    o = o.parent;
-  }
-  return false;
-}
+const PLANET_SCALE_LERP = 10;
 
 function createTooltip(): HTMLDivElement {
   const el = document.createElement('div');
@@ -179,19 +173,20 @@ function onMouseMove(event: MouseEvent): void {
 
 function updateHoverAndTooltip(): void {
   raycaster.setFromCamera(mouse, camera);
-  const planetMeshes: THREE.Object3D[] = [planet];
+  // Planet: only the main sphere (no children) so hover area is smaller
+  const planetHits = raycaster.intersectObject(planet, false);
   const asteroidMeshes = Array.from(asteroids.values()).map((a) => a.mesh);
-  const allObjects = [...planetMeshes, ...asteroidMeshes];
-  const intersects = raycaster.intersectObjects(allObjects, true);
+  const asteroidHits = raycaster.intersectObjects(asteroidMeshes);
+  const allHits = [...planetHits, ...asteroidHits].sort((a, b) => a.distance - b.distance);
 
   hoveredPlanet = false;
   hoveredAsteroid = null;
 
-  if (intersects.length > 0) {
-    const hit = intersects[0];
+  if (allHits.length > 0) {
+    const hit = allHits[0];
     const obj = hit.object;
 
-    if (isPartOfPlanet(obj)) {
+    if (obj === planet) {
       hoveredPlanet = true;
     } else {
       const data = (obj as THREE.Mesh).userData as { task?: Task };
@@ -211,17 +206,17 @@ function updateHoverAndTooltip(): void {
 
 function onMouseClick(): void {
   raycaster.setFromCamera(mouse, camera);
-  const planetMeshes: THREE.Object3D[] = [planet];
+  const planetHits = raycaster.intersectObject(planet, false);
   const asteroidMeshes = Array.from(asteroids.values()).map((a) => a.mesh);
-  const allObjects = [...planetMeshes, ...asteroidMeshes];
-  const intersects = raycaster.intersectObjects(allObjects, true);
+  const asteroidHits = raycaster.intersectObjects(asteroidMeshes);
+  const allHits = [...planetHits, ...asteroidHits].sort((a, b) => a.distance - b.distance);
 
-  if (intersects.length === 0) return;
+  if (allHits.length === 0) return;
 
-  const hit = intersects[0];
+  const hit = allHits[0];
   const obj = hit.object;
 
-  if (isPartOfPlanet(obj)) {
+  if (obj === planet) {
     window.openTaskPanel?.();
   } else {
     const data = (obj as THREE.Mesh).userData as { task?: Task };
@@ -263,7 +258,9 @@ export function initWallpaper(canvas: HTMLCanvasElement, onCollision?: (taskId: 
     const now = Date.now() / 1000;
     const maxRadius = getResponsiveMaxRadius(camera);
 
-    planet.scale.setScalar(hoveredPlanet ? HOVER_SCALE : 1);
+    const targetScale = hoveredPlanet ? HOVER_SCALE : 1;
+    planetScaleCurrent = THREE.MathUtils.lerp(planetScaleCurrent, targetScale, Math.min(1, deltaSec * PLANET_SCALE_LERP));
+    planet.scale.setScalar(planetScaleCurrent);
     planet.rotation.y += 0.02 * deltaSec;
 
     asteroids.forEach((asteroid, taskId) => {
@@ -322,7 +319,11 @@ export function setTasks(tasks: Task[]): void {
   activeTasks.forEach((task, index) => {
     if (asteroids.has(task.id)) {
       const a = asteroids.get(task.id)!;
+      const prevTask = (a.mesh.userData as { task?: Task }).task;
       (a.mesh.userData as { task?: Task }).task = task;
+      if (prevTask && prevTask.importance !== task.importance) {
+        updateAsteroidForImportance(a, task);
+      }
     } else {
       const asteroid = createAsteroidMesh(task, index, totalTasks);
       (asteroid.mesh.userData as { task?: Task }).task = task;

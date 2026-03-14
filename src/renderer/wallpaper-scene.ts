@@ -237,6 +237,20 @@ export function createAsteroidMesh(
 }
 
 /**
+ * Update asteroid mesh geometry and material when importance changes
+ */
+export function updateAsteroidForImportance(asteroid: AsteroidMesh, task: Task): void {
+  const size = importanceToSize(task.importance);
+  asteroid.mesh.geometry.dispose();
+  asteroid.mesh.geometry = new THREE.DodecahedronGeometry(size, 0);
+
+  const hasGlow = task.importance >= 4;
+  const mat = asteroid.mesh.material as THREE.MeshStandardMaterial;
+  mat.emissive.setHex(hasGlow ? 0x4a3020 : 0x000000);
+  mat.emissiveIntensity = hasGlow ? 0.15 : 0;
+}
+
+/**
  * Update asteroid position - time-based distance, smooth rotation
  */
 export function updateAsteroidPosition(
