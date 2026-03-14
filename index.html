@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'">
+  <title>Taskeroid</title>
+  <link rel="stylesheet" href="ui.css">
+  <style>
+    * { margin: 0; padding: 0; }
+    body { padding: 0; min-height: 100vh; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    #scene-container {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+    }
+    #scene-container canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    #tasks-btn {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 10;
+      padding: 12px 20px;
+      background: rgba(35, 134, 54, 0.9);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    #tasks-btn:hover {
+      background: #2ea043;
+    }
+    #task-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 420px;
+      max-width: 100%;
+      height: 100%;
+      background: rgba(15, 20, 25, 0.97);
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      box-shadow: -4px 0 24px rgba(0,0,0,0.4);
+      transform: translateX(100%);
+      transition: transform 0.25s ease;
+      overflow: auto;
+    }
+    #task-panel.open {
+      transform: translateX(0);
+    }
+    #task-panel .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      border-bottom: 1px solid #30363d;
+      flex-shrink: 0;
+    }
+    #task-panel .panel-header h2 {
+      font-size: 1.25rem;
+      color: #58a6ff;
+    }
+    #task-panel .panel-close {
+      background: transparent;
+      border: none;
+      color: #8b949e;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 0 8px;
+      line-height: 1;
+    }
+    #task-panel .panel-close:hover {
+      color: #e6edf3;
+    }
+    #task-panel .panel-content {
+      flex: 1;
+      padding: 16px 20px;
+      overflow-y: auto;
+    }
+    #task-panel .app {
+      max-width: 100%;
+      margin: 0;
+    }
+    #task-panel header {
+      margin-bottom: 16px;
+    }
+    #task-panel header h1 {
+      font-size: 1.25rem;
+    }
+    #task-panel header p {
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="scene-container">
+    <canvas id="wallpaper-canvas"></canvas>
+  </div>
+  <button id="tasks-btn" type="button">Manage Tasks</button>
+  <div id="task-panel">
+    <div class="panel-header">
+      <h2>Tasks</h2>
+      <button id="panel-close" class="panel-close" type="button">×</button>
+    </div>
+    <div class="panel-content">
+      <div id="root"></div>
+    </div>
+  </div>
+  <script src="dist/wallpaper-renderer.js"></script>
+  <script src="dist/ui.js"></script>
+  <script>
+    (function() {
+      const btn = document.getElementById('tasks-btn');
+      const panel = document.getElementById('task-panel');
+      const closeBtn = document.getElementById('panel-close');
+      if (btn && panel) btn.addEventListener('click', () => panel.classList.add('open'));
+      if (closeBtn && panel) closeBtn.addEventListener('click', () => panel.classList.remove('open'));
+    })();
+  </script>
+</body>
+</html>

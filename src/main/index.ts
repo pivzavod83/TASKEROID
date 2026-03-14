@@ -1,8 +1,9 @@
 /**
- * Electron main process - wallpaper + task manager
+ * Electron main process - Taskeroid app
  */
-import { app, BrowserWindow, ipcMain, Tray, nativeImage } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeImage } from 'electron';
 import path from 'path';
+import fs from 'fs';
 import {
   getAllTasks,
   addTask,
@@ -14,72 +15,45 @@ import {
 } from '../database/database';
 import { Task } from '../models/task';
 
-let wallpaperWindow: BrowserWindow | null = null;
-let uiWindow: BrowserWindow | null = null;
-let tray: Tray | null = null;
+let mainWindow: BrowserWindow | null = null;
 
-const isDev = process.env.NODE_ENV === 'development';
-
-function createWallpaperWindow(): void {
-  wallpaperWindow = new BrowserWindow({
-    fullscreen: true,
-    frame: false,
-    transparent: false,
-    skipTaskbar: true,
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, '../preload/wallpaper-preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  });
-
-  wallpaperWindow.setFullScreen(true);
-  wallpaperWindow.setAlwaysOnTop(false, 'normal');
-  wallpaperWindow.setVisibleOnAllWorkspaces(true);
-  wallpaperWindow.setFocusable(false);
-
-  const wallpaperPath = path.join(__dirname, '../../wallpaper.html');
-  wallpaperWindow.loadFile(wallpaperPath);
-
-  wallpaperWindow.once('ready-to-show', () => {
-    wallpaperWindow?.show();
-  });
-
-  wallpaperWindow.on('closed', () => {
-    wallpaperWindow = null;
-  });
+function getIcon(): string | undefined {
+  const iconPath = path.join(__dirname, '../../assets/icon.png');
+  return fs.existsSync(iconPath) ? iconPath : undefined;
 }
 
-function createUIWindow(): void {
-  if (uiWindow) {
-    uiWindow.focus();
-    return;
-  }
-
-  uiWindow = new BrowserWindow({
-    width: 480,
-    height: 640,
+function createMainWindow(): void {
+  mainWindow = new BrowserWindow({
+    width: 1024,
+    height: 720,
+    minWidth: 640,
+    minHeight: 480,
+    show: false,
+    frame: true,
     resizable: true,
+    ...(getIcon() ? { icon: getIcon() } : {}),
     webPreferences: {
-      preload: path.join(__dirname, '../preload/ui-preload.js'),
+      preload: path.join(__dirname, '../preload/app-preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
     },
   });
 
-  const uiPath = path.join(__dirname, '../../ui.html');
-  uiWindow.loadFile(uiPath);
+  const indexPath = path.join(__dirname, '../../index.html');
+  mainWindow.loadFile(indexPath);
 
-  uiWindow.on('closed', () => {
-    uiWindow = null;
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
   });
 }
 
 function broadcastTasksUpdate(): void {
   const tasks = getAllTasks();
-  wallpaperWindow?.webContents.send('tasks-updated', tasks);
-  uiWindow?.webContents.send('tasks-updated', tasks);
+  mainWindow?.webContents.send('tasks-updated', tasks);
 }
 
 ipcMain.handle('get-tasks', () => getAllTasks());
@@ -114,36 +88,17 @@ ipcMain.on('asteroid-collision', (_e, taskId: string) => {
   broadcastTasksUpdate();
 });
 
-function setupTray(): void {
-  const iconPath = path.join(__dirname, '../../assets/tray-icon.png');
-  let icon = nativeImage.createFromPath(iconPath);
-  if (icon.isEmpty()) {
-    icon = nativeImage.createFromDataURL(
-      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAOklEQVQ4T2NkYGD4z0ABYBzVMKoBagbQgAGjGhi1AWqBoRoY1YCaBqgZQBMLRhUxMjL+BwBFwhINs2oK2QAAAABJRU5ErkJggg=='
-    );
-  }
-  tray = new Tray(icon.resize({ width: 16, height: 16 }));
-  tray.setToolTip('Taskeroid - Click to open Task Manager');
-  tray.on('click', () => createUIWindow());
-}
-
 app.whenReady().then(async () => {
   await initDatabase();
   if (process.argv.includes('--demo')) {
     resetAndSeedDemo();
   }
-  createWallpaperWindow();
-  if (process.platform !== 'linux') {
-    try { setupTray(); } catch { /* no tray */ }
-  }
-  if (process.argv.includes('--open-ui')) {
-    createUIWindow();
-  }
+  createMainWindow();
 });
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWallpaperWindow();
+    createMainWindow();
   }
 });
 
@@ -155,13 +110,12 @@ app.on('window-all-closed', () => {
 });
 
 app.on('second-instance', () => {
-  createUIWindow();
+  if (mainWindow) {
+    mainWindow.focus();
+  }
 });
 
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 }
-
-// Run at startup (optional - user can enable in settings later)
-app.setLoginItemSettings({ openAtLogin: false });

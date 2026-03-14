@@ -18098,6 +18098,161 @@
       return data;
     }
   };
+  var LineBasicMaterial = class extends Material {
+    constructor(parameters) {
+      super();
+      this.isLineBasicMaterial = true;
+      this.type = "LineBasicMaterial";
+      this.color = new Color(16777215);
+      this.map = null;
+      this.linewidth = 1;
+      this.linecap = "round";
+      this.linejoin = "round";
+      this.fog = true;
+      this.setValues(parameters);
+    }
+    copy(source) {
+      super.copy(source);
+      this.color.copy(source.color);
+      this.map = source.map;
+      this.linewidth = source.linewidth;
+      this.linecap = source.linecap;
+      this.linejoin = source.linejoin;
+      this.fog = source.fog;
+      return this;
+    }
+  };
+  var _start$1 = /* @__PURE__ */ new Vector3();
+  var _end$1 = /* @__PURE__ */ new Vector3();
+  var _inverseMatrix$1 = /* @__PURE__ */ new Matrix4();
+  var _ray$1 = /* @__PURE__ */ new Ray();
+  var _sphere$1 = /* @__PURE__ */ new Sphere();
+  var Line = class extends Object3D {
+    constructor(geometry = new BufferGeometry(), material = new LineBasicMaterial()) {
+      super();
+      this.isLine = true;
+      this.type = "Line";
+      this.geometry = geometry;
+      this.material = material;
+      this.updateMorphTargets();
+    }
+    copy(source, recursive) {
+      super.copy(source, recursive);
+      this.material = Array.isArray(source.material) ? source.material.slice() : source.material;
+      this.geometry = source.geometry;
+      return this;
+    }
+    computeLineDistances() {
+      const geometry = this.geometry;
+      if (geometry.index === null) {
+        const positionAttribute = geometry.attributes.position;
+        const lineDistances = [0];
+        for (let i = 1, l = positionAttribute.count; i < l; i++) {
+          _start$1.fromBufferAttribute(positionAttribute, i - 1);
+          _end$1.fromBufferAttribute(positionAttribute, i);
+          lineDistances[i] = lineDistances[i - 1];
+          lineDistances[i] += _start$1.distanceTo(_end$1);
+        }
+        geometry.setAttribute("lineDistance", new Float32BufferAttribute(lineDistances, 1));
+      } else {
+        console.warn("THREE.Line.computeLineDistances(): Computation only possible with non-indexed BufferGeometry.");
+      }
+      return this;
+    }
+    raycast(raycaster2, intersects) {
+      const geometry = this.geometry;
+      const matrixWorld = this.matrixWorld;
+      const threshold = raycaster2.params.Line.threshold;
+      const drawRange = geometry.drawRange;
+      if (geometry.boundingSphere === null)
+        geometry.computeBoundingSphere();
+      _sphere$1.copy(geometry.boundingSphere);
+      _sphere$1.applyMatrix4(matrixWorld);
+      _sphere$1.radius += threshold;
+      if (raycaster2.ray.intersectsSphere(_sphere$1) === false)
+        return;
+      _inverseMatrix$1.copy(matrixWorld).invert();
+      _ray$1.copy(raycaster2.ray).applyMatrix4(_inverseMatrix$1);
+      const localThreshold = threshold / ((this.scale.x + this.scale.y + this.scale.z) / 3);
+      const localThresholdSq = localThreshold * localThreshold;
+      const vStart = new Vector3();
+      const vEnd = new Vector3();
+      const interSegment = new Vector3();
+      const interRay = new Vector3();
+      const step = this.isLineSegments ? 2 : 1;
+      const index = geometry.index;
+      const attributes = geometry.attributes;
+      const positionAttribute = attributes.position;
+      if (index !== null) {
+        const start = Math.max(0, drawRange.start);
+        const end = Math.min(index.count, drawRange.start + drawRange.count);
+        for (let i = start, l = end - 1; i < l; i += step) {
+          const a = index.getX(i);
+          const b = index.getX(i + 1);
+          vStart.fromBufferAttribute(positionAttribute, a);
+          vEnd.fromBufferAttribute(positionAttribute, b);
+          const distSq = _ray$1.distanceSqToSegment(vStart, vEnd, interRay, interSegment);
+          if (distSq > localThresholdSq)
+            continue;
+          interRay.applyMatrix4(this.matrixWorld);
+          const distance = raycaster2.ray.origin.distanceTo(interRay);
+          if (distance < raycaster2.near || distance > raycaster2.far)
+            continue;
+          intersects.push({
+            distance,
+            // What do we want? intersection point on the ray or on the segment??
+            // point: raycaster.ray.at( distance ),
+            point: interSegment.clone().applyMatrix4(this.matrixWorld),
+            index: i,
+            face: null,
+            faceIndex: null,
+            object: this
+          });
+        }
+      } else {
+        const start = Math.max(0, drawRange.start);
+        const end = Math.min(positionAttribute.count, drawRange.start + drawRange.count);
+        for (let i = start, l = end - 1; i < l; i += step) {
+          vStart.fromBufferAttribute(positionAttribute, i);
+          vEnd.fromBufferAttribute(positionAttribute, i + 1);
+          const distSq = _ray$1.distanceSqToSegment(vStart, vEnd, interRay, interSegment);
+          if (distSq > localThresholdSq)
+            continue;
+          interRay.applyMatrix4(this.matrixWorld);
+          const distance = raycaster2.ray.origin.distanceTo(interRay);
+          if (distance < raycaster2.near || distance > raycaster2.far)
+            continue;
+          intersects.push({
+            distance,
+            // What do we want? intersection point on the ray or on the segment??
+            // point: raycaster.ray.at( distance ),
+            point: interSegment.clone().applyMatrix4(this.matrixWorld),
+            index: i,
+            face: null,
+            faceIndex: null,
+            object: this
+          });
+        }
+      }
+    }
+    updateMorphTargets() {
+      const geometry = this.geometry;
+      const morphAttributes = geometry.morphAttributes;
+      const keys = Object.keys(morphAttributes);
+      if (keys.length > 0) {
+        const morphAttribute = morphAttributes[keys[0]];
+        if (morphAttribute !== void 0) {
+          this.morphTargetInfluences = [];
+          this.morphTargetDictionary = {};
+          for (let m = 0, ml = morphAttribute.length; m < ml; m++) {
+            const name = morphAttribute[m].name || String(m);
+            this.morphTargetInfluences.push(0);
+            this.morphTargetDictionary[name] = m;
+          }
+        }
+      }
+    }
+  };
   var PointsMaterial = class extends Material {
     constructor(parameters) {
       super();
@@ -18214,6 +18369,13 @@
       });
     }
   }
+  var CanvasTexture = class extends Texture {
+    constructor(canvas2, mapping, wrapS, wrapT, magFilter, minFilter, format, type, anisotropy) {
+      super(canvas2, mapping, wrapS, wrapT, magFilter, minFilter, format, type, anisotropy);
+      this.isCanvasTexture = true;
+      this.needsUpdate = true;
+    }
+  };
   var PolyhedronGeometry = class _PolyhedronGeometry extends BufferGeometry {
     constructor(vertices = [], indices = [], radius = 1, detail = 0) {
       super();
@@ -20022,28 +20184,139 @@
     const stars = new Points(starGeometry, starMaterial);
     scene2.add(stars);
   }
+  function createEarthTexture() {
+    const w = 1024;
+    const h = 512;
+    const canvas2 = document.createElement("canvas");
+    canvas2.width = w;
+    canvas2.height = h;
+    const ctx = canvas2.getContext("2d");
+    ctx.fillStyle = "#0a4d7a";
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = "#00c896";
+    ctx.beginPath();
+    ctx.moveTo(w * 0.18, h * 0.25);
+    ctx.lineTo(w * 0.22, h * 0.15);
+    ctx.lineTo(w * 0.32, h * 0.22);
+    ctx.lineTo(w * 0.34, h * 0.45);
+    ctx.lineTo(w * 0.28, h * 0.72);
+    ctx.lineTo(w * 0.22, h * 0.82);
+    ctx.lineTo(w * 0.18, h * 0.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(w * 0.28, h * 0.68);
+    ctx.lineTo(w * 0.35, h * 0.58);
+    ctx.lineTo(w * 0.4, h * 0.78);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(w * 0.48, h * 0.2);
+    ctx.lineTo(w * 0.52, h * 0.18);
+    ctx.lineTo(w * 0.55, h * 0.42);
+    ctx.lineTo(w * 0.52, h * 0.72);
+    ctx.lineTo(w * 0.47, h * 0.82);
+    ctx.lineTo(w * 0.45, h * 0.48);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(w * 0.54, h * 0.15);
+    ctx.lineTo(w * 0.72, h * 0.12);
+    ctx.lineTo(w * 0.88, h * 0.25);
+    ctx.lineTo(w * 0.86, h * 0.48);
+    ctx.lineTo(w * 0.7, h * 0.72);
+    ctx.lineTo(w * 0.55, h * 0.52);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(w * 0.76, h * 0.65);
+    ctx.lineTo(w * 0.85, h * 0.62);
+    ctx.lineTo(w * 0.88, h * 0.78);
+    ctx.lineTo(w * 0.8, h * 0.84);
+    ctx.closePath();
+    ctx.fill();
+    const tex = new CanvasTexture(canvas2);
+    tex.needsUpdate = true;
+    return tex;
+  }
   function createPlanet(scene2) {
     const geometry = new SphereGeometry(1.2, 64, 64);
+    const texture = createEarthTexture();
     const material = new MeshStandardMaterial({
-      color: 3824250,
-      emissive: 1718874,
-      emissiveIntensity: 0.3,
-      metalness: 0.1,
-      roughness: 0.8
+      map: texture,
+      color: 16777215,
+      emissive: 13124,
+      emissiveIntensity: 0.5,
+      metalness: 0.05,
+      roughness: 0.5,
+      transparent: true,
+      opacity: 0.92
     });
     const planet2 = new Mesh(geometry, material);
     planet2.position.set(0, 0, 0);
     scene2.add(planet2);
-    const ringGeometry = new RingGeometry(1.4, 1.6, 64);
-    const ringMaterial = new MeshBasicMaterial({
-      color: 4881050,
+    const glowGeometry = new SphereGeometry(1.32, 32, 32);
+    const glowMaterial = new MeshBasicMaterial({
+      color: 54527,
       transparent: true,
-      opacity: 0.2,
-      side: DoubleSide
+      opacity: 0.12,
+      side: BackSide
     });
-    const ring = new Mesh(ringGeometry, ringMaterial);
-    ring.rotation.x = -Math.PI / 2;
-    planet2.add(ring);
+    const glow = new Mesh(glowGeometry, glowMaterial);
+    planet2.add(glow);
+    const gridMaterial = new LineBasicMaterial({
+      color: 58828,
+      transparent: true,
+      opacity: 0.35
+    });
+    const r = 1.22;
+    const toRad = Math.PI / 180;
+    for (let lat = -75; lat <= 75; lat += 30) {
+      const theta = (90 - lat) * toRad;
+      const points = [];
+      for (let lon = 0; lon <= 360; lon += 4) {
+        const phi = lon * toRad;
+        points.push(
+          new Vector3(
+            r * Math.sin(theta) * Math.cos(phi),
+            r * Math.cos(theta),
+            r * Math.sin(theta) * Math.sin(phi)
+          )
+        );
+      }
+      const lineGeo = new BufferGeometry().setFromPoints(points);
+      planet2.add(new Line(lineGeo, gridMaterial));
+    }
+    for (let lon = 0; lon < 360; lon += 18) {
+      const phi = lon * toRad;
+      const points = [];
+      for (let lat = -90; lat <= 90; lat += 4) {
+        const theta = (90 - lat) * toRad;
+        points.push(
+          new Vector3(
+            r * Math.sin(theta) * Math.cos(phi),
+            r * Math.cos(theta),
+            r * Math.sin(theta) * Math.sin(phi)
+          )
+        );
+      }
+      const lineGeo = new BufferGeometry().setFromPoints(points);
+      planet2.add(new Line(lineGeo, gridMaterial));
+    }
+    const orbitRadii = [1.5, 1.85, 2.2];
+    orbitRadii.forEach((rad, i) => {
+      const ringGeo = new RingGeometry(rad, rad + 0.025, 64);
+      const ringMat = new MeshBasicMaterial({
+        color: 58828,
+        transparent: true,
+        opacity: 0.2 - i * 0.04,
+        side: DoubleSide
+      });
+      const ring = new Mesh(ringGeo, ringMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.rotation.y = i * 0.15;
+      planet2.add(ring);
+    });
     return planet2;
   }
   function getResponsiveMaxRadius(camera2) {

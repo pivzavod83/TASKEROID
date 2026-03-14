@@ -1,7 +1,7 @@
 {
   "name": "taskeroid",
   "version": "1.0.0",
-  "description": "Live animated wallpaper with task system - asteroids represent tasks approaching a planet",
+  "description": "Task manager - tasks appear as asteroids approaching a planet",
   "main": "dist/main/index.js",
   "scripts": {
     "build": "tsc && npm run build:wallpaper && npm run build:ui",
@@ -11,7 +11,7 @@
     "dev": "npm run build && electron .",
     "watch": "tsc -w"
   },
-  "keywords": ["wallpaper", "tasks", "electron", "three.js"],
+  "keywords": ["tasks", "electron", "three.js"],
   "author": "",
   "license": "MIT",
   "devDependencies": {

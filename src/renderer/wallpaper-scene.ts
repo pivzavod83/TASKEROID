@@ -40,29 +40,156 @@ export function createStarBackground(scene: THREE.Scene): void {
   scene.add(stars);
 }
 
+/**
+ * Generate equirectangular Earth-like texture: blue water + green continents
+ */
+function createEarthTexture(): THREE.CanvasTexture {
+  const w = 1024;
+  const h = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d')!;
+  // Blue oceans (base)
+  ctx.fillStyle = '#0a4d7a';
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#00c896'; // bright green, high-tech glow
+  // Simplified continent silhouettes (equirectangular projection)
+  // Americas
+  ctx.beginPath();
+  ctx.moveTo(w * 0.18, h * 0.25);
+  ctx.lineTo(w * 0.22, h * 0.15);
+  ctx.lineTo(w * 0.32, h * 0.22);
+  ctx.lineTo(w * 0.34, h * 0.45);
+  ctx.lineTo(w * 0.28, h * 0.72);
+  ctx.lineTo(w * 0.22, h * 0.82);
+  ctx.lineTo(w * 0.18, h * 0.6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(w * 0.28, h * 0.68);
+  ctx.lineTo(w * 0.35, h * 0.58);
+  ctx.lineTo(w * 0.4, h * 0.78);
+  ctx.closePath();
+  ctx.fill();
+  // Europe / Africa
+  ctx.beginPath();
+  ctx.moveTo(w * 0.48, h * 0.2);
+  ctx.lineTo(w * 0.52, h * 0.18);
+  ctx.lineTo(w * 0.55, h * 0.42);
+  ctx.lineTo(w * 0.52, h * 0.72);
+  ctx.lineTo(w * 0.47, h * 0.82);
+  ctx.lineTo(w * 0.45, h * 0.48);
+  ctx.closePath();
+  ctx.fill();
+  // Asia
+  ctx.beginPath();
+  ctx.moveTo(w * 0.54, h * 0.15);
+  ctx.lineTo(w * 0.72, h * 0.12);
+  ctx.lineTo(w * 0.88, h * 0.25);
+  ctx.lineTo(w * 0.86, h * 0.48);
+  ctx.lineTo(w * 0.7, h * 0.72);
+  ctx.lineTo(w * 0.55, h * 0.52);
+  ctx.closePath();
+  ctx.fill();
+  // Australia
+  ctx.beginPath();
+  ctx.moveTo(w * 0.76, h * 0.65);
+  ctx.lineTo(w * 0.85, h * 0.62);
+  ctx.lineTo(w * 0.88, h * 0.78);
+  ctx.lineTo(w * 0.8, h * 0.84);
+  ctx.closePath();
+  ctx.fill();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+
 export function createPlanet(scene: THREE.Scene): THREE.Mesh {
   const geometry = new THREE.SphereGeometry(1.2, 64, 64);
+  const texture = createEarthTexture();
   const material = new THREE.MeshStandardMaterial({
-    color: 0x3a5a7a,
-    emissive: 0x1a3a5a,
-    emissiveIntensity: 0.3,
-    metalness: 0.1,
-    roughness: 0.8,
+    map: texture,
+    color: 0xffffff,
+    emissive: 0x003344,
+    emissiveIntensity: 0.5,
+    metalness: 0.05,
+    roughness: 0.5,
+    transparent: true,
+    opacity: 0.92,
   });
   const planet = new THREE.Mesh(geometry, material);
   planet.position.set(0, 0, 0);
   scene.add(planet);
 
-  const ringGeometry = new THREE.RingGeometry(1.4, 1.6, 64);
-  const ringMaterial = new THREE.MeshBasicMaterial({
-    color: 0x4a7a9a,
+  // Atmospheric glow
+  const glowGeometry = new THREE.SphereGeometry(1.32, 32, 32);
+  const glowMaterial = new THREE.MeshBasicMaterial({
+    color: 0x00d4ff,
     transparent: true,
-    opacity: 0.2,
-    side: THREE.DoubleSide,
+    opacity: 0.12,
+    side: THREE.BackSide,
   });
-  const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-  ring.rotation.x = -Math.PI / 2;
-  planet.add(ring);
+  const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+  planet.add(glow);
+
+  // Latitude / longitude grid (glowing lines)
+  const gridMaterial = new THREE.LineBasicMaterial({
+    color: 0x00e5cc,
+    transparent: true,
+    opacity: 0.35,
+  });
+  const r = 1.22;
+  const toRad = Math.PI / 180;
+  for (let lat = -75; lat <= 75; lat += 30) {
+    const theta = (90 - lat) * toRad;
+    const points: THREE.Vector3[] = [];
+    for (let lon = 0; lon <= 360; lon += 4) {
+      const phi = lon * toRad;
+      points.push(
+        new THREE.Vector3(
+          r * Math.sin(theta) * Math.cos(phi),
+          r * Math.cos(theta),
+          r * Math.sin(theta) * Math.sin(phi)
+        )
+      );
+    }
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+    planet.add(new THREE.Line(lineGeo, gridMaterial));
+  }
+  for (let lon = 0; lon < 360; lon += 18) {
+    const phi = lon * toRad;
+    const points: THREE.Vector3[] = [];
+    for (let lat = -90; lat <= 90; lat += 4) {
+      const theta = (90 - lat) * toRad;
+      points.push(
+        new THREE.Vector3(
+          r * Math.sin(theta) * Math.cos(phi),
+          r * Math.cos(theta),
+          r * Math.sin(theta) * Math.sin(phi)
+        )
+      );
+    }
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+    planet.add(new THREE.Line(lineGeo, gridMaterial));
+  }
+
+  // Orbital rings (high-tech style)
+  const orbitRadii = [1.5, 1.85, 2.2];
+  orbitRadii.forEach((rad, i) => {
+    const ringGeo = new THREE.RingGeometry(rad, rad + 0.025, 64);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x00e5cc,
+      transparent: true,
+      opacity: 0.2 - i * 0.04,
+      side: THREE.DoubleSide,
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.rotation.y = i * 0.15;
+    planet.add(ring);
+  });
 
   return planet;
 }
