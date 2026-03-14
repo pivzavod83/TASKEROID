@@ -1,6 +1,0 @@
-node_modules/
-dist/
-.npm
-.npmrc
-*.log
-npm-debug.log*
