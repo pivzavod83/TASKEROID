@@ -19,25 +19,6 @@
       width: 100%;
       height: 100%;
     }
-    #tasks-btn {
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      z-index: 10;
-      padding: 12px 20px;
-      background: rgba(35, 134, 54, 0.9);
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      font-family: inherit;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-    }
-    #tasks-btn:hover {
-      background: #2ea043;
-    }
     #task-panel {
       position: fixed;
       top: 0;
@@ -99,13 +80,45 @@
     #task-panel header p {
       font-size: 0.8rem;
     }
+    #asteroid-edit-popup {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 30;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      min-width: 280px;
+      display: none;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    #asteroid-edit-popup.open { display: block; }
+    #asteroid-edit-popup h3 { color: #58a6ff; margin-bottom: 16px; font-size: 1rem; }
+    #asteroid-edit-popup input { width: 100%; padding: 8px 10px; margin-bottom: 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 14px; }
+    #asteroid-edit-popup label { display: block; font-size: 0.8rem; color: #8b949e; margin-bottom: 4px; }
+    #asteroid-edit-popup .form-group { margin-bottom: 12px; }
+    #asteroid-edit-popup .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+    #asteroid-edit-popup button { padding: 8px 14px; font-size: 13px; background: #21262d; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; cursor: pointer; }
+    #asteroid-edit-popup button:hover { background: #30363d; }
+    #asteroid-edit-popup button.primary { background: #238636; border-color: #238636; color: white; }
+    #asteroid-edit-popup button.primary:hover { background: #2ea043; }
+    #asteroid-edit-popup button.delete { color: #f85149; border-color: #f85149; }
+    #asteroid-edit-popup button.delete:hover { background: rgba(248,81,73,0.2); }
+    #asteroid-edit-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 25; display: none;
+    }
+    #asteroid-edit-backdrop.open { display: block; }
   </style>
 </head>
 <body>
   <div id="scene-container">
     <canvas id="wallpaper-canvas"></canvas>
   </div>
-  <button id="tasks-btn" type="button">Manage Tasks</button>
+  <div id="asteroid-edit-backdrop"></div>
+  <div id="asteroid-edit-popup"></div>
   <div id="task-panel">
     <div class="panel-header">
       <h2>Tasks</h2>
@@ -119,11 +132,10 @@
   <script src="dist/ui.js"></script>
   <script>
     (function() {
-      const btn = document.getElementById('tasks-btn');
       const panel = document.getElementById('task-panel');
       const closeBtn = document.getElementById('panel-close');
-      if (btn && panel) btn.addEventListener('click', () => panel.classList.add('open'));
       if (closeBtn && panel) closeBtn.addEventListener('click', () => panel.classList.remove('open'));
+      window.openTaskPanel = function() { panel?.classList.add('open'); };
     })();
   </script>
 </body>

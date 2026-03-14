@@ -1,5 +1,5 @@
 /**
- * Game-loop style renderer - 60 FPS, time-based updates, raycasting tooltips
+ * Game-loop style renderer - 60 FPS, raycasting, tooltips, click interactions
  */
 import * as THREE from 'three';
 import {
@@ -12,6 +12,14 @@ import {
 } from './wallpaper-scene';
 import { Task } from '../models/task';
 import { hasCollided } from '../physics/asteroid-physics';
+
+declare const window: Window & {
+  openTaskPanel?: () => void;
+  taskeroidUI?: {
+    updateTask: (id: string, u: unknown) => Promise<void>;
+    deleteTask: (id: string) => Promise<void>;
+  };
+};
 
 let scene: THREE.Scene;
 let camera: THREE.PerspectiveCamera;
@@ -26,6 +34,20 @@ let mouseClientX = 0;
 let mouseClientY = 0;
 let tooltipEl: HTMLDivElement | null = null;
 let hoveredAsteroid: AsteroidMesh | null = null;
+let hoveredPlanet = false;
+let asteroidEditPopup: HTMLDivElement | null = null;
+let asteroidEditBackdrop: HTMLDivElement | null = null;
+
+const HOVER_SCALE = 1.12;
+
+function isPartOfPlanet(obj: THREE.Object3D): boolean {
+  let o: THREE.Object3D | null = obj;
+  while (o) {
+    if (o === planet) return true;
+    o = o.parent;
+  }
+  return false;
+}
 
 function createTooltip(): HTMLDivElement {
   const el = document.createElement('div');
@@ -55,8 +77,7 @@ function showTooltip(x: number, y: number, task: Task): void {
   const deadlineStr = new Date(task.deadline * 1000).toLocaleString();
   tooltipEl.innerHTML = `
     <strong>${escapeHtml(task.title)}</strong><br>
-    <span style="color:#8b949e">Due: ${escapeHtml(deadlineStr)}</span><br>
-    <span style="color:#58a6ff">Importance: ${task.importance}/5</span>
+    <span style="color:#8b949e">Due: ${escapeHtml(deadlineStr)}</span>
   `;
   const offset = 14;
   let left = x + offset;
@@ -80,6 +101,75 @@ function escapeHtml(s: string): string {
   return div.innerHTML;
 }
 
+function closeAsteroidEdit(): void {
+  if (asteroidEditPopup) asteroidEditPopup.classList.remove('open');
+  if (asteroidEditBackdrop) asteroidEditBackdrop.classList.remove('open');
+}
+
+function openAsteroidEdit(task: Task): void {
+  const popup = document.getElementById('asteroid-edit-popup');
+  const backdrop = document.getElementById('asteroid-edit-backdrop');
+  if (!popup || !backdrop) return;
+
+  const defaultDate = new Date(task.deadline * 1000).toISOString().slice(0, 10);
+  const defaultTime = new Date(task.deadline * 1000).toISOString().slice(11, 16);
+
+  popup.innerHTML = `
+    <h3>Edit Task</h3>
+    <div class="form-group">
+      <label>Title</label>
+      <input type="text" id="edit-title" value="${escapeHtml(task.title)}" />
+    </div>
+    <div class="form-group">
+      <label>Deadline</label>
+      <input type="date" id="edit-deadline" value="${defaultDate}" />
+    </div>
+    <div class="form-group">
+      <label>Time</label>
+      <input type="time" id="edit-time" value="${defaultTime}" />
+    </div>
+    <div class="form-group">
+      <label>Importance (1–5)</label>
+      <input type="number" min="1" max="5" id="edit-importance" value="${task.importance}" />
+    </div>
+    <div class="actions">
+      <button type="button" class="primary" id="edit-save">Save</button>
+      <button type="button" id="edit-complete">Complete</button>
+      <button type="button" class="delete" id="edit-delete">Delete</button>
+    </div>
+  `;
+
+  const saveAndClose = (updates: Partial<Task>): void => {
+    window.taskeroidUI?.updateTask?.(task.id, updates);
+    closeAsteroidEdit();
+  };
+
+  const handleSave = (): void => {
+    const title = (document.getElementById('edit-title') as HTMLInputElement)?.value?.trim() || task.title;
+    const date = (document.getElementById('edit-deadline') as HTMLInputElement)?.value || defaultDate;
+    const time = (document.getElementById('edit-time') as HTMLInputElement)?.value || defaultTime;
+    const importance = Math.max(1, Math.min(5, Number((document.getElementById('edit-importance') as HTMLInputElement)?.value) || 3));
+    const deadline = Math.floor(new Date(`${date}T${time}`).getTime() / 1000);
+    saveAndClose({ title, deadline, importance });
+  };
+
+  const handleComplete = (): void => saveAndClose({ completed: true });
+  const handleDelete = (): void => {
+    window.taskeroidUI?.deleteTask?.(task.id);
+    closeAsteroidEdit();
+  };
+
+  popup.querySelector('#edit-save')?.addEventListener('click', handleSave);
+  popup.querySelector('#edit-complete')?.addEventListener('click', handleComplete);
+  popup.querySelector('#edit-delete')?.addEventListener('click', handleDelete);
+  backdrop.addEventListener('click', closeAsteroidEdit, { once: true });
+
+  popup.classList.add('open');
+  backdrop.classList.add('open');
+  asteroidEditPopup = popup as HTMLDivElement;
+  asteroidEditBackdrop = backdrop as HTMLDivElement;
+}
+
 function onMouseMove(event: MouseEvent): void {
   mouseClientX = event.clientX;
   mouseClientY = event.clientY;
@@ -87,24 +177,58 @@ function onMouseMove(event: MouseEvent): void {
   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 }
 
-function updateTooltip(): void {
+function updateHoverAndTooltip(): void {
   raycaster.setFromCamera(mouse, camera);
-  const meshes = Array.from(asteroids.values()).map((a) => a.mesh);
-  const intersects = raycaster.intersectObjects(meshes);
+  const planetMeshes: THREE.Object3D[] = [planet];
+  const asteroidMeshes = Array.from(asteroids.values()).map((a) => a.mesh);
+  const allObjects = [...planetMeshes, ...asteroidMeshes];
+  const intersects = raycaster.intersectObjects(allObjects, true);
+
+  hoveredPlanet = false;
+  hoveredAsteroid = null;
 
   if (intersects.length > 0) {
     const hit = intersects[0];
-    const mesh = hit.object as THREE.Mesh;
-    const data = mesh.userData as { task?: Task };
-    if (data.task) {
-      hoveredAsteroid = asteroids.get(data.task.id) || null;
-      showTooltip(mouseClientX, mouseClientY, data.task);
-      return;
+    const obj = hit.object;
+
+    if (isPartOfPlanet(obj)) {
+      hoveredPlanet = true;
+    } else {
+      const data = (obj as THREE.Mesh).userData as { task?: Task };
+      if (data.task) {
+        hoveredAsteroid = asteroids.get(data.task.id) || null;
+        showTooltip(mouseClientX, mouseClientY, data.task);
+      }
     }
   }
 
-  hoveredAsteroid = null;
-  hideTooltip();
+  if (!hoveredAsteroid) hideTooltip();
+
+  // Update cursor
+  const canvas = renderer.domElement;
+  canvas.style.cursor = hoveredPlanet || hoveredAsteroid ? 'pointer' : 'default';
+}
+
+function onMouseClick(): void {
+  raycaster.setFromCamera(mouse, camera);
+  const planetMeshes: THREE.Object3D[] = [planet];
+  const asteroidMeshes = Array.from(asteroids.values()).map((a) => a.mesh);
+  const allObjects = [...planetMeshes, ...asteroidMeshes];
+  const intersects = raycaster.intersectObjects(allObjects, true);
+
+  if (intersects.length === 0) return;
+
+  const hit = intersects[0];
+  const obj = hit.object;
+
+  if (isPartOfPlanet(obj)) {
+    window.openTaskPanel?.();
+  } else {
+    const data = (obj as THREE.Mesh).userData as { task?: Task };
+    if (data.task) {
+      openAsteroidEdit(data.task);
+    }
+  }
 }
 
 export function initWallpaper(canvas: HTMLCanvasElement, onCollision?: (taskId: string) => void): void {
@@ -122,6 +246,7 @@ export function initWallpaper(canvas: HTMLCanvasElement, onCollision?: (taskId: 
   raycaster = new THREE.Raycaster();
   mouse = new THREE.Vector2(2, 2);
   canvas.addEventListener('mousemove', onMouseMove);
+  canvas.addEventListener('click', onMouseClick);
 
   const ambientLight = new THREE.AmbientLight(0x404060, 0.5);
   scene.add(ambientLight);
@@ -138,6 +263,7 @@ export function initWallpaper(canvas: HTMLCanvasElement, onCollision?: (taskId: 
     const now = Date.now() / 1000;
     const maxRadius = getResponsiveMaxRadius(camera);
 
+    planet.scale.setScalar(hoveredPlanet ? HOVER_SCALE : 1);
     planet.rotation.y += 0.02 * deltaSec;
 
     asteroids.forEach((asteroid, taskId) => {
@@ -152,9 +278,14 @@ export function initWallpaper(canvas: HTMLCanvasElement, onCollision?: (taskId: 
         return;
       }
       updateAsteroidPosition(asteroid, task, now, maxRadius, deltaSec);
+      const isHovered = asteroid === hoveredAsteroid;
+      if (isHovered) {
+        const s = asteroid.mesh.scale.x;
+        asteroid.mesh.scale.setScalar(s * HOVER_SCALE);
+      }
     });
 
-    updateTooltip();
+    updateHoverAndTooltip();
     renderer.render(scene, camera);
     animationId = requestAnimationFrame(animate);
   }
@@ -205,9 +336,14 @@ export function stopWallpaper(): void {
   cancelAnimationFrame(animationId);
   window.removeEventListener('resize', onResize);
   const canvas = renderer?.domElement;
-  if (canvas) canvas.removeEventListener('mousemove', onMouseMove);
+  if (canvas) {
+    canvas.removeEventListener('mousemove', onMouseMove);
+    canvas.removeEventListener('click', onMouseClick);
+  }
   tooltipEl?.remove();
   tooltipEl = null;
+  document.getElementById('asteroid-edit-popup')?.classList.remove('open');
+  document.getElementById('asteroid-edit-backdrop')?.classList.remove('open');
   asteroids.forEach((a) => {
     scene.remove(a.mesh);
     a.mesh.geometry.dispose();

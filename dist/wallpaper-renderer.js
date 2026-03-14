@@ -20254,6 +20254,7 @@
     });
     const planet2 = new Mesh(geometry, material);
     planet2.position.set(0, 0, 0);
+    planet2.userData = { type: "planet" };
     scene2.add(planet2);
     const glowGeometry = new SphereGeometry(1.32, 32, 32);
     const glowMaterial = new MeshBasicMaterial({
@@ -20370,6 +20371,19 @@
   var mouseClientY = 0;
   var tooltipEl = null;
   var hoveredAsteroid = null;
+  var hoveredPlanet = false;
+  var asteroidEditPopup = null;
+  var asteroidEditBackdrop = null;
+  var HOVER_SCALE = 1.12;
+  function isPartOfPlanet(obj) {
+    let o = obj;
+    while (o) {
+      if (o === planet)
+        return true;
+      o = o.parent;
+    }
+    return false;
+  }
   function createTooltip() {
     const el = document.createElement("div");
     el.id = "asteroid-tooltip";
@@ -20398,8 +20412,7 @@
     const deadlineStr = new Date(task.deadline * 1e3).toLocaleString();
     tooltipEl.innerHTML = `
     <strong>${escapeHtml(task.title)}</strong><br>
-    <span style="color:#8b949e">Due: ${escapeHtml(deadlineStr)}</span><br>
-    <span style="color:#58a6ff">Importance: ${task.importance}/5</span>
+    <span style="color:#8b949e">Due: ${escapeHtml(deadlineStr)}</span>
   `;
     const offset = 14;
     let left = x + offset;
@@ -20425,28 +20438,119 @@
     div.textContent = s;
     return div.innerHTML;
   }
+  function closeAsteroidEdit() {
+    if (asteroidEditPopup)
+      asteroidEditPopup.classList.remove("open");
+    if (asteroidEditBackdrop)
+      asteroidEditBackdrop.classList.remove("open");
+  }
+  function openAsteroidEdit(task) {
+    const popup = document.getElementById("asteroid-edit-popup");
+    const backdrop = document.getElementById("asteroid-edit-backdrop");
+    if (!popup || !backdrop)
+      return;
+    const defaultDate = new Date(task.deadline * 1e3).toISOString().slice(0, 10);
+    const defaultTime = new Date(task.deadline * 1e3).toISOString().slice(11, 16);
+    popup.innerHTML = `
+    <h3>Edit Task</h3>
+    <div class="form-group">
+      <label>Title</label>
+      <input type="text" id="edit-title" value="${escapeHtml(task.title)}" />
+    </div>
+    <div class="form-group">
+      <label>Deadline</label>
+      <input type="date" id="edit-deadline" value="${defaultDate}" />
+    </div>
+    <div class="form-group">
+      <label>Time</label>
+      <input type="time" id="edit-time" value="${defaultTime}" />
+    </div>
+    <div class="form-group">
+      <label>Importance (1\u20135)</label>
+      <input type="number" min="1" max="5" id="edit-importance" value="${task.importance}" />
+    </div>
+    <div class="actions">
+      <button type="button" class="primary" id="edit-save">Save</button>
+      <button type="button" id="edit-complete">Complete</button>
+      <button type="button" class="delete" id="edit-delete">Delete</button>
+    </div>
+  `;
+    const saveAndClose = (updates) => {
+      window.taskeroidUI?.updateTask?.(task.id, updates);
+      closeAsteroidEdit();
+    };
+    const handleSave = () => {
+      const title = document.getElementById("edit-title")?.value?.trim() || task.title;
+      const date = document.getElementById("edit-deadline")?.value || defaultDate;
+      const time = document.getElementById("edit-time")?.value || defaultTime;
+      const importance = Math.max(1, Math.min(5, Number(document.getElementById("edit-importance")?.value) || 3));
+      const deadline = Math.floor((/* @__PURE__ */ new Date(`${date}T${time}`)).getTime() / 1e3);
+      saveAndClose({ title, deadline, importance });
+    };
+    const handleComplete = () => saveAndClose({ completed: true });
+    const handleDelete = () => {
+      window.taskeroidUI?.deleteTask?.(task.id);
+      closeAsteroidEdit();
+    };
+    popup.querySelector("#edit-save")?.addEventListener("click", handleSave);
+    popup.querySelector("#edit-complete")?.addEventListener("click", handleComplete);
+    popup.querySelector("#edit-delete")?.addEventListener("click", handleDelete);
+    backdrop.addEventListener("click", closeAsteroidEdit, { once: true });
+    popup.classList.add("open");
+    backdrop.classList.add("open");
+    asteroidEditPopup = popup;
+    asteroidEditBackdrop = backdrop;
+  }
   function onMouseMove(event) {
     mouseClientX = event.clientX;
     mouseClientY = event.clientY;
     mouse.x = event.clientX / window.innerWidth * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
   }
-  function updateTooltip() {
+  function updateHoverAndTooltip() {
     raycaster.setFromCamera(mouse, camera);
-    const meshes = Array.from(asteroids.values()).map((a) => a.mesh);
-    const intersects = raycaster.intersectObjects(meshes);
+    const planetMeshes = [planet];
+    const asteroidMeshes = Array.from(asteroids.values()).map((a) => a.mesh);
+    const allObjects = [...planetMeshes, ...asteroidMeshes];
+    const intersects = raycaster.intersectObjects(allObjects, true);
+    hoveredPlanet = false;
+    hoveredAsteroid = null;
     if (intersects.length > 0) {
       const hit = intersects[0];
-      const mesh = hit.object;
-      const data = mesh.userData;
-      if (data.task) {
-        hoveredAsteroid = asteroids.get(data.task.id) || null;
-        showTooltip(mouseClientX, mouseClientY, data.task);
-        return;
+      const obj = hit.object;
+      if (isPartOfPlanet(obj)) {
+        hoveredPlanet = true;
+      } else {
+        const data = obj.userData;
+        if (data.task) {
+          hoveredAsteroid = asteroids.get(data.task.id) || null;
+          showTooltip(mouseClientX, mouseClientY, data.task);
+        }
       }
     }
-    hoveredAsteroid = null;
-    hideTooltip();
+    if (!hoveredAsteroid)
+      hideTooltip();
+    const canvas2 = renderer.domElement;
+    canvas2.style.cursor = hoveredPlanet || hoveredAsteroid ? "pointer" : "default";
+  }
+  function onMouseClick() {
+    raycaster.setFromCamera(mouse, camera);
+    const planetMeshes = [planet];
+    const asteroidMeshes = Array.from(asteroids.values()).map((a) => a.mesh);
+    const allObjects = [...planetMeshes, ...asteroidMeshes];
+    const intersects = raycaster.intersectObjects(allObjects, true);
+    if (intersects.length === 0)
+      return;
+    const hit = intersects[0];
+    const obj = hit.object;
+    if (isPartOfPlanet(obj)) {
+      window.openTaskPanel?.();
+    } else {
+      const data = obj.userData;
+      if (data.task) {
+        openAsteroidEdit(data.task);
+      }
+    }
   }
   function initWallpaper(canvas2, onCollision) {
     scene = new Scene();
@@ -20460,6 +20564,7 @@
     raycaster = new Raycaster();
     mouse = new Vector2(2, 2);
     canvas2.addEventListener("mousemove", onMouseMove);
+    canvas2.addEventListener("click", onMouseClick);
     const ambientLight = new AmbientLight(4210784, 0.5);
     scene.add(ambientLight);
     const dirLight = new DirectionalLight(16777215, 0.8);
@@ -20472,6 +20577,7 @@
       lastTime = currentTime;
       const now = Date.now() / 1e3;
       const maxRadius = getResponsiveMaxRadius(camera);
+      planet.scale.setScalar(hoveredPlanet ? HOVER_SCALE : 1);
       planet.rotation.y += 0.02 * deltaSec;
       asteroids.forEach((asteroid, taskId) => {
         const task = asteroid.mesh.userData.task;
@@ -20486,8 +20592,13 @@
           return;
         }
         updateAsteroidPosition(asteroid, task, now, maxRadius, deltaSec);
+        const isHovered = asteroid === hoveredAsteroid;
+        if (isHovered) {
+          const s = asteroid.mesh.scale.x;
+          asteroid.mesh.scale.setScalar(s * HOVER_SCALE);
+        }
       });
-      updateTooltip();
+      updateHoverAndTooltip();
       renderer.render(scene, camera);
       animationId = requestAnimationFrame(animate);
     }
@@ -20531,10 +20642,14 @@
     cancelAnimationFrame(animationId);
     window.removeEventListener("resize", onResize);
     const canvas2 = renderer?.domElement;
-    if (canvas2)
+    if (canvas2) {
       canvas2.removeEventListener("mousemove", onMouseMove);
+      canvas2.removeEventListener("click", onMouseClick);
+    }
     tooltipEl?.remove();
     tooltipEl = null;
+    document.getElementById("asteroid-edit-popup")?.classList.remove("open");
+    document.getElementById("asteroid-edit-backdrop")?.classList.remove("open");
     asteroids.forEach((a) => {
       scene.remove(a.mesh);
       a.mesh.geometry.dispose();

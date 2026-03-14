@@ -121,6 +121,7 @@ export function createPlanet(scene: THREE.Scene): THREE.Mesh {
   });
   const planet = new THREE.Mesh(geometry, material);
   planet.position.set(0, 0, 0);
+  planet.userData = { type: 'planet' };
   scene.add(planet);
 
   // Atmospheric glow
