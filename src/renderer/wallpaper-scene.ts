@@ -14,6 +14,8 @@ export interface AsteroidMesh {
   mesh: THREE.Sprite;
   flame: THREE.Sprite;
   routeLine: THREE.Line;
+  label: THREE.Sprite;
+  labelText: string;
   baseAngle: number; // radians in XY plane
   targetAngle: number;
   angleOffset: number; // small random offset
@@ -686,6 +688,43 @@ function createFlameTexture(seed: number, intensity: number): THREE.CanvasTextur
   return tex;
 }
 
+function createLabelTexture(text: string): THREE.CanvasTexture {
+  const labelText = text.trim().slice(0, 42) || 'UNTITLED TASK';
+  const canvas = document.createElement('canvas');
+  canvas.width = 768;
+  canvas.height = 192;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.font = '700 54px Consolas, "Lucida Console", "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+
+  const x = canvas.width / 2;
+  const y = canvas.height / 2;
+  ctx.strokeStyle = 'rgba(5, 12, 20, 0.95)';
+  ctx.lineWidth = 14;
+  ctx.strokeText(labelText, x, y);
+  ctx.fillStyle = 'rgba(190, 244, 255, 0.95)';
+  ctx.fillText(labelText, x, y);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+export function updateAsteroidLabel(asteroid: AsteroidMesh, title: string): void {
+  const nextText = title.trim().slice(0, 42) || 'UNTITLED TASK';
+  if (asteroid.labelText === nextText) return;
+
+  const labelMaterial = asteroid.label.material as THREE.SpriteMaterial;
+  labelMaterial.map?.dispose();
+  labelMaterial.map = createLabelTexture(nextText);
+  labelMaterial.needsUpdate = true;
+  asteroid.labelText = nextText;
+}
+
 function lerpAngle(current: number, target: number, alpha: number): number {
   let diff = (target - current + Math.PI) % (Math.PI * 2);
   if (diff < 0) diff += Math.PI * 2;
@@ -723,14 +762,26 @@ export function createAsteroidMesh(
     color: 0xffffff,
     opacity: 0.62,
   });
+  const labelText = task.title.trim().slice(0, 42) || 'UNTITLED TASK';
+  const labelMaterial = new THREE.SpriteMaterial({
+    map: createLabelTexture(labelText),
+    transparent: true,
+    depthWrite: false,
+    depthTest: false,
+    color: 0xffffff,
+    opacity: 0.92,
+  });
 
   const mesh = new THREE.Sprite(material);
   const flame = new THREE.Sprite(flameMaterial);
+  const label = new THREE.Sprite(labelMaterial);
   const routeLine = createRouteLine();
   mesh.userData = { taskId: task.id, task };
   const baseScale = size * 2.35;
   mesh.scale.setScalar(baseScale);
   flame.center.set(0.2, 0.5);
+  label.center.set(0.5, 0);
+  label.scale.set(baseScale * 2.7, baseScale * 0.72, 1);
 
   const baseAngle = (taskIndex / Math.max(1, totalTasks)) * Math.PI * 2;
   const angleOffset = (Math.random() - 0.5) * 0.4;
@@ -746,6 +797,8 @@ export function createAsteroidMesh(
     mesh,
     flame,
     routeLine,
+    label,
+    labelText,
     baseAngle,
     targetAngle: baseAngle,
     angleOffset,
@@ -780,11 +833,14 @@ export function updateAsteroidForImportance(asteroid: AsteroidMesh, task: Task):
 export function disposeAsteroidMesh(asteroid: AsteroidMesh): void {
   const material = asteroid.mesh.material as THREE.SpriteMaterial;
   const flameMaterial = asteroid.flame.material as THREE.SpriteMaterial;
+  const labelMaterial = asteroid.label.material as THREE.SpriteMaterial;
   const routeMaterial = asteroid.routeLine.material as THREE.LineDashedMaterial;
   material.map?.dispose();
   material.dispose();
   flameMaterial.map?.dispose();
   flameMaterial.dispose();
+  labelMaterial.map?.dispose();
+  labelMaterial.dispose();
   asteroid.routeLine.geometry.dispose();
   routeMaterial.dispose();
 }
@@ -838,23 +894,37 @@ export function updateAsteroidPosition(
   const dirToPlanetY = distanceToPlanet > 0.0001 ? -y / distanceToPlanet : 0;
   const awayX = -dirToPlanetX;
   const awayY = -dirToPlanetY;
+  const perpX = -awayY;
+  const perpY = awayX;
+
+  const labelScaleBase = THREE.MathUtils.clamp(asteroid.currentScale, 0.42, 1.5);
+  const labelOffset = asteroid.currentScale * 0.34;
+  asteroid.label.position.set(x + awayX * labelOffset, y + awayY * labelOffset, 0.03);
+  asteroid.label.scale.set(labelScaleBase * 2.7, labelScaleBase * 0.72, 1);
+  const labelMaterial = asteroid.label.material as THREE.SpriteMaterial;
+  labelMaterial.opacity = isHovered ? 1 : 0.9;
 
   const flamePulse = 1 + Math.sin(currentTime * asteroid.flameFlickerSpeed + asteroid.flamePhase) * 0.08;
   const flameDrift = Math.sin(currentTime * (asteroid.flameFlickerSpeed * 0.7) + asteroid.flamePhase) * 0.03;
+  const wiggle = Math.sin(currentTime * (asteroid.flameFlickerSpeed * 1.9) + asteroid.flamePhase * 1.4) * asteroid.currentScale * 0.12;
+  const wiggleSecondary = Math.sin(currentTime * (asteroid.flameFlickerSpeed * 1.2) + asteroid.flamePhase * 0.6) * asteroid.currentScale * 0.05;
   const headOffset = asteroid.currentScale * 0.18;
   asteroid.flame.position.set(
-    x + awayX * (headOffset + flameDrift),
-    y + awayY * (headOffset + flameDrift),
+    x + awayX * (headOffset + flameDrift) + perpX * (wiggle + wiggleSecondary),
+    y + awayY * (headOffset + flameDrift) + perpY * (wiggle + wiggleSecondary),
     -0.09
   );
+  const stretch = 1 + Math.sin(currentTime * (asteroid.flameFlickerSpeed * 0.95) + asteroid.flamePhase) * 0.16;
+  const squash = 1 + Math.cos(currentTime * (asteroid.flameFlickerSpeed * 1.35) + asteroid.flamePhase) * 0.09;
   asteroid.flame.scale.set(
-    asteroid.currentScale * 2.15 * flamePulse,
-    asteroid.currentScale * 0.95 * flamePulse,
+    asteroid.currentScale * 1.55 * flamePulse * stretch,
+    asteroid.currentScale * 0.68 * flamePulse * squash,
     1
   );
   const flameMaterial = asteroid.flame.material as THREE.SpriteMaterial;
   // Texture points to +X, rotate so the tail stays opposite of motion toward the planet.
-  flameMaterial.rotation = Math.atan2(awayY, awayX);
+  const flutter = Math.sin(currentTime * (asteroid.flameFlickerSpeed * 1.45) + asteroid.flamePhase) * 0.18;
+  flameMaterial.rotation = Math.atan2(awayY, awayX) + flutter;
   flameMaterial.opacity = 0.48 + Math.sin(currentTime * (asteroid.flameFlickerSpeed * 0.9) + asteroid.flamePhase) * 0.08;
 
   // Animated dashed route from asteroid to planet center.
@@ -882,6 +952,16 @@ export function updateAsteroidPosition(
   routePositions.needsUpdate = true;
   routeGeo.computeBoundingSphere();
   asteroid.routeLine.computeLineDistances();
+
+  const distanceRatio = THREE.MathUtils.clamp(distanceToPlanet / Math.max(0.0001, maxRadius), 0, 1);
+  if (distanceRatio < 0.33) {
+    routeMat.color.setHex(0xff3247);
+  } else if (distanceRatio < 0.66) {
+    routeMat.color.setHex(0xffb300);
+  } else {
+    routeMat.color.setHex(0x00d68f);
+  }
+
   routeMat.dashOffset = -(currentTime * 0.22 * asteroid.routeSpeed);
-  routeMat.opacity = 0.35 + 0.22 * (0.5 + 0.5 * Math.sin(currentTime * 1.4 + asteroid.routePhase));
+  routeMat.opacity = 0.16 + 0.16 * (0.5 + 0.5 * Math.sin(currentTime * 1.4 + asteroid.routePhase));
 }

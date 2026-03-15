@@ -20937,6 +20937,38 @@
     tex.needsUpdate = true;
     return tex;
   }
+  function createLabelTexture(text) {
+    const labelText = text.trim().slice(0, 42) || "UNTITLED TASK";
+    const canvas2 = document.createElement("canvas");
+    canvas2.width = 768;
+    canvas2.height = 192;
+    const ctx = canvas2.getContext("2d");
+    ctx.clearRect(0, 0, canvas2.width, canvas2.height);
+    ctx.font = '700 54px Consolas, "Lucida Console", "Courier New", monospace';
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    const x = canvas2.width / 2;
+    const y = canvas2.height / 2;
+    ctx.strokeStyle = "rgba(5, 12, 20, 0.95)";
+    ctx.lineWidth = 14;
+    ctx.strokeText(labelText, x, y);
+    ctx.fillStyle = "rgba(190, 244, 255, 0.95)";
+    ctx.fillText(labelText, x, y);
+    const tex = new CanvasTexture(canvas2);
+    tex.needsUpdate = true;
+    return tex;
+  }
+  function updateAsteroidLabel(asteroid, title) {
+    const nextText = title.trim().slice(0, 42) || "UNTITLED TASK";
+    if (asteroid.labelText === nextText)
+      return;
+    const labelMaterial = asteroid.label.material;
+    labelMaterial.map?.dispose();
+    labelMaterial.map = createLabelTexture(nextText);
+    labelMaterial.needsUpdate = true;
+    asteroid.labelText = nextText;
+  }
   function lerpAngle(current, target, alpha) {
     let diff = (target - current + Math.PI) % (Math.PI * 2);
     if (diff < 0)
@@ -20965,13 +20997,25 @@
       color: 16777215,
       opacity: 0.62
     });
+    const labelText = task.title.trim().slice(0, 42) || "UNTITLED TASK";
+    const labelMaterial = new SpriteMaterial({
+      map: createLabelTexture(labelText),
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+      color: 16777215,
+      opacity: 0.92
+    });
     const mesh = new Sprite(material);
     const flame = new Sprite(flameMaterial);
+    const label = new Sprite(labelMaterial);
     const routeLine = createRouteLine();
     mesh.userData = { taskId: task.id, task };
     const baseScale = size * 2.35;
     mesh.scale.setScalar(baseScale);
     flame.center.set(0.2, 0.5);
+    label.center.set(0.5, 0);
+    label.scale.set(baseScale * 2.7, baseScale * 0.72, 1);
     const baseAngle = taskIndex / Math.max(1, totalTasks) * Math.PI * 2;
     const angleOffset = (Math.random() - 0.5) * 0.4;
     const flamePhase = Math.random() * Math.PI * 2;
@@ -20985,6 +21029,8 @@
       mesh,
       flame,
       routeLine,
+      label,
+      labelText,
       baseAngle,
       targetAngle: baseAngle,
       angleOffset,
@@ -21012,11 +21058,14 @@
   function disposeAsteroidMesh(asteroid) {
     const material = asteroid.mesh.material;
     const flameMaterial = asteroid.flame.material;
+    const labelMaterial = asteroid.label.material;
     const routeMaterial = asteroid.routeLine.material;
     material.map?.dispose();
     material.dispose();
     flameMaterial.map?.dispose();
     flameMaterial.dispose();
+    labelMaterial.map?.dispose();
+    labelMaterial.dispose();
     asteroid.routeLine.geometry.dispose();
     routeMaterial.dispose();
   }
@@ -21053,21 +21102,34 @@
     const dirToPlanetY = distanceToPlanet > 1e-4 ? -y / distanceToPlanet : 0;
     const awayX = -dirToPlanetX;
     const awayY = -dirToPlanetY;
+    const perpX = -awayY;
+    const perpY = awayX;
+    const labelScaleBase = MathUtils.clamp(asteroid.currentScale, 0.42, 1.5);
+    const labelOffset = asteroid.currentScale * 0.34;
+    asteroid.label.position.set(x + awayX * labelOffset, y + awayY * labelOffset, 0.03);
+    asteroid.label.scale.set(labelScaleBase * 2.7, labelScaleBase * 0.72, 1);
+    const labelMaterial = asteroid.label.material;
+    labelMaterial.opacity = isHovered ? 1 : 0.9;
     const flamePulse = 1 + Math.sin(currentTime * asteroid.flameFlickerSpeed + asteroid.flamePhase) * 0.08;
     const flameDrift = Math.sin(currentTime * (asteroid.flameFlickerSpeed * 0.7) + asteroid.flamePhase) * 0.03;
+    const wiggle = Math.sin(currentTime * (asteroid.flameFlickerSpeed * 1.9) + asteroid.flamePhase * 1.4) * asteroid.currentScale * 0.12;
+    const wiggleSecondary = Math.sin(currentTime * (asteroid.flameFlickerSpeed * 1.2) + asteroid.flamePhase * 0.6) * asteroid.currentScale * 0.05;
     const headOffset = asteroid.currentScale * 0.18;
     asteroid.flame.position.set(
-      x + awayX * (headOffset + flameDrift),
-      y + awayY * (headOffset + flameDrift),
+      x + awayX * (headOffset + flameDrift) + perpX * (wiggle + wiggleSecondary),
+      y + awayY * (headOffset + flameDrift) + perpY * (wiggle + wiggleSecondary),
       -0.09
     );
+    const stretch = 1 + Math.sin(currentTime * (asteroid.flameFlickerSpeed * 0.95) + asteroid.flamePhase) * 0.16;
+    const squash = 1 + Math.cos(currentTime * (asteroid.flameFlickerSpeed * 1.35) + asteroid.flamePhase) * 0.09;
     asteroid.flame.scale.set(
-      asteroid.currentScale * 2.15 * flamePulse,
-      asteroid.currentScale * 0.95 * flamePulse,
+      asteroid.currentScale * 1.55 * flamePulse * stretch,
+      asteroid.currentScale * 0.68 * flamePulse * squash,
       1
     );
     const flameMaterial = asteroid.flame.material;
-    flameMaterial.rotation = Math.atan2(awayY, awayX);
+    const flutter = Math.sin(currentTime * (asteroid.flameFlickerSpeed * 1.45) + asteroid.flamePhase) * 0.18;
+    flameMaterial.rotation = Math.atan2(awayY, awayX) + flutter;
     flameMaterial.opacity = 0.48 + Math.sin(currentTime * (asteroid.flameFlickerSpeed * 0.9) + asteroid.flamePhase) * 0.08;
     const routeGeo = asteroid.routeLine.geometry;
     const routeMat = asteroid.routeLine.material;
@@ -21091,8 +21153,16 @@
     routePositions.needsUpdate = true;
     routeGeo.computeBoundingSphere();
     asteroid.routeLine.computeLineDistances();
+    const distanceRatio = MathUtils.clamp(distanceToPlanet / Math.max(1e-4, maxRadius), 0, 1);
+    if (distanceRatio < 0.33) {
+      routeMat.color.setHex(16724551);
+    } else if (distanceRatio < 0.66) {
+      routeMat.color.setHex(16757504);
+    } else {
+      routeMat.color.setHex(54927);
+    }
     routeMat.dashOffset = -(currentTime * 0.22 * asteroid.routeSpeed);
-    routeMat.opacity = 0.35 + 0.22 * (0.5 + 0.5 * Math.sin(currentTime * 1.4 + asteroid.routePhase));
+    routeMat.opacity = 0.16 + 0.16 * (0.5 + 0.5 * Math.sin(currentTime * 1.4 + asteroid.routePhase));
   }
 
   // src/renderer/wallpaper-loop.ts
@@ -21115,6 +21185,7 @@
   var asteroidEditBackdrop = null;
   var planetScaleCurrent = 1;
   var completionEffects = /* @__PURE__ */ new Map();
+  var planetShieldPulses = [];
   var HOVER_SCALE = 1.12;
   var PLANET_SCALE_LERP = 10;
   function createExplosionTexture() {
@@ -21138,10 +21209,65 @@
     tex.needsUpdate = true;
     return tex;
   }
+  function createPlanetShieldPulse(delaySec = 0) {
+    const pulseMaterial = new MeshBasicMaterial({
+      color: 7012334,
+      transparent: true,
+      opacity: 0,
+      side: DoubleSide,
+      depthWrite: false,
+      depthTest: false,
+      blending: AdditiveBlending
+    });
+    const pulseMesh = new Mesh(new RingGeometry(1, 1.06, 96), pulseMaterial);
+    pulseMesh.position.copy(planet.position);
+    pulseMesh.position.z = -0.04;
+    pulseMesh.scale.setScalar(1.42);
+    scene.add(pulseMesh);
+    return {
+      mesh: pulseMesh,
+      material: pulseMaterial,
+      elapsed: -Math.max(0, delaySec),
+      duration: 1.15,
+      startRadius: 1.42,
+      endRadius: 7.2
+    };
+  }
+  function triggerPlanetShieldPulse() {
+    planetShieldPulses.push(createPlanetShieldPulse(0));
+    planetShieldPulses.push(createPlanetShieldPulse(0.08));
+  }
+  function disposePlanetShieldPulse(pulse) {
+    scene.remove(pulse.mesh);
+    pulse.mesh.geometry.dispose();
+    pulse.material.dispose();
+  }
+  function updatePlanetShieldPulses(deltaSec) {
+    for (let i = planetShieldPulses.length - 1; i >= 0; i--) {
+      const pulse = planetShieldPulses[i];
+      pulse.elapsed += deltaSec;
+      if (pulse.elapsed < 0) {
+        continue;
+      }
+      const t = Math.min(1, pulse.elapsed / pulse.duration);
+      const eased = 1 - Math.pow(1 - t, 2);
+      const radius = MathUtils.lerp(pulse.startRadius, pulse.endRadius, eased);
+      const alpha = Math.max(0, Math.pow(1 - t, 1.6));
+      const shimmer = 0.85 + 0.15 * Math.sin(pulse.elapsed * 12);
+      pulse.mesh.scale.setScalar(radius);
+      pulse.mesh.rotation.z += deltaSec * 0.42;
+      pulse.material.opacity = 0.26 * alpha * shimmer;
+      if (t >= 1) {
+        disposePlanetShieldPulse(pulse);
+        planetShieldPulses.splice(i, 1);
+      }
+    }
+  }
   function removeAsteroidImmediately(taskId, asteroid) {
     scene.remove(asteroid.mesh);
     scene.remove(asteroid.flame);
     scene.remove(asteroid.routeLine);
+    scene.remove(asteroid.label);
     disposeAsteroidMesh(asteroid);
     asteroids.delete(taskId);
   }
@@ -21288,6 +21414,8 @@
     }
     asteroid.flame.visible = false;
     asteroid.routeLine.visible = false;
+    asteroid.label.visible = false;
+    triggerPlanetShieldPulse();
     const effect = createCompletionEffect(taskId, asteroid);
     completionEffects.set(taskId, effect);
   }
@@ -21499,6 +21627,7 @@
       planetScaleCurrent = MathUtils.lerp(planetScaleCurrent, targetScale, Math.min(1, deltaSec * PLANET_SCALE_LERP));
       planet.scale.setScalar(planetScaleCurrent);
       planet.rotation.y += 0.02 * deltaSec;
+      updatePlanetShieldPulses(deltaSec);
       updateCompletionEffects(deltaSec);
       asteroids.forEach((asteroid, taskId) => {
         if (completionEffects.has(taskId))
@@ -21553,6 +21682,9 @@
         if (prevTask && prevTask.importance !== task.importance) {
           updateAsteroidForImportance(a, task);
         }
+        if (!prevTask || prevTask.title !== task.title) {
+          updateAsteroidLabel(a, task.title);
+        }
       } else {
         const asteroid = createAsteroidMesh(task, index, totalTasks);
         asteroid.mesh.userData.task = task;
@@ -21560,6 +21692,7 @@
         scene.add(asteroid.mesh);
         scene.add(asteroid.flame);
         scene.add(asteroid.routeLine);
+        scene.add(asteroid.label);
         asteroids.set(task.id, asteroid);
       }
     });
@@ -21580,6 +21713,8 @@
       removeAsteroidImmediately(a.taskId, a);
     });
     asteroids.clear();
+    planetShieldPulses.forEach((pulse) => disposePlanetShieldPulse(pulse));
+    planetShieldPulses = [];
     completionEffects.forEach((effect) => disposeCompletionEffect(effect));
     completionEffects.clear();
     if (starBackground) {

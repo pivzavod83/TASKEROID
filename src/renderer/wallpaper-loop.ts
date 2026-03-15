@@ -12,6 +12,7 @@ import {
   updateStarBackground,
   getResponsiveMaxRadius,
   updateAsteroidForImportance,
+  updateAsteroidLabel,
   setAsteroidTargetAngle,
   AsteroidMesh,
   StarBackground,
@@ -46,6 +47,7 @@ let asteroidEditPopup: HTMLDivElement | null = null;
 let asteroidEditBackdrop: HTMLDivElement | null = null;
 let planetScaleCurrent = 1;
 let completionEffects: Map<string, CompletionEffect> = new Map();
+let planetShieldPulses: PlanetShieldPulse[] = [];
 
 const HOVER_SCALE = 1.12;
 const PLANET_SCALE_LERP = 10;
@@ -61,6 +63,15 @@ interface CompletionEffect {
   elapsed: number;
   duration: number;
   finished: boolean;
+}
+
+interface PlanetShieldPulse {
+  mesh: THREE.Mesh;
+  material: THREE.MeshBasicMaterial;
+  elapsed: number;
+  duration: number;
+  startRadius: number;
+  endRadius: number;
 }
 
 function createExplosionTexture(): THREE.CanvasTexture {
@@ -87,10 +98,74 @@ function createExplosionTexture(): THREE.CanvasTexture {
   return tex;
 }
 
+function createPlanetShieldPulse(delaySec = 0): PlanetShieldPulse {
+  const pulseMaterial = new THREE.MeshBasicMaterial({
+    color: 0x6affee,
+    transparent: true,
+    opacity: 0,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    depthTest: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const pulseMesh = new THREE.Mesh(new THREE.RingGeometry(1, 1.06, 96), pulseMaterial);
+  pulseMesh.position.copy(planet.position);
+  pulseMesh.position.z = -0.04;
+  pulseMesh.scale.setScalar(1.42);
+  scene.add(pulseMesh);
+
+  return {
+    mesh: pulseMesh,
+    material: pulseMaterial,
+    elapsed: -Math.max(0, delaySec),
+    duration: 1.15,
+    startRadius: 1.42,
+    endRadius: 7.2,
+  };
+}
+
+function triggerPlanetShieldPulse(): void {
+  planetShieldPulses.push(createPlanetShieldPulse(0));
+  planetShieldPulses.push(createPlanetShieldPulse(0.08));
+}
+
+function disposePlanetShieldPulse(pulse: PlanetShieldPulse): void {
+  scene.remove(pulse.mesh);
+  pulse.mesh.geometry.dispose();
+  pulse.material.dispose();
+}
+
+function updatePlanetShieldPulses(deltaSec: number): void {
+  for (let i = planetShieldPulses.length - 1; i >= 0; i--) {
+    const pulse = planetShieldPulses[i];
+    pulse.elapsed += deltaSec;
+
+    if (pulse.elapsed < 0) {
+      continue;
+    }
+
+    const t = Math.min(1, pulse.elapsed / pulse.duration);
+    const eased = 1 - Math.pow(1 - t, 2);
+    const radius = THREE.MathUtils.lerp(pulse.startRadius, pulse.endRadius, eased);
+    const alpha = Math.max(0, Math.pow(1 - t, 1.6));
+    const shimmer = 0.85 + 0.15 * Math.sin(pulse.elapsed * 12);
+
+    pulse.mesh.scale.setScalar(radius);
+    pulse.mesh.rotation.z += deltaSec * 0.42;
+    pulse.material.opacity = 0.26 * alpha * shimmer;
+
+    if (t >= 1) {
+      disposePlanetShieldPulse(pulse);
+      planetShieldPulses.splice(i, 1);
+    }
+  }
+}
+
 function removeAsteroidImmediately(taskId: string, asteroid: AsteroidMesh): void {
   scene.remove(asteroid.mesh);
   scene.remove(asteroid.flame);
   scene.remove(asteroid.routeLine);
+  scene.remove(asteroid.label);
   disposeAsteroidMesh(asteroid);
   asteroids.delete(taskId);
 }
@@ -255,6 +330,9 @@ export function playTaskCompleteAnimation(taskId: string): void {
 
   asteroid.flame.visible = false;
   asteroid.routeLine.visible = false;
+  asteroid.label.visible = false;
+
+  triggerPlanetShieldPulse();
 
   const effect = createCompletionEffect(taskId, asteroid);
   completionEffects.set(taskId, effect);
@@ -494,6 +572,7 @@ export function initWallpaper(canvas: HTMLCanvasElement, onCollision?: (taskId: 
     planet.scale.setScalar(planetScaleCurrent);
     planet.rotation.y += 0.02 * deltaSec;
 
+    updatePlanetShieldPulses(deltaSec);
     updateCompletionEffects(deltaSec);
 
     asteroids.forEach((asteroid, taskId) => {
@@ -555,6 +634,9 @@ export function setTasks(tasks: Task[]): void {
       if (prevTask && prevTask.importance !== task.importance) {
         updateAsteroidForImportance(a, task);
       }
+      if (!prevTask || prevTask.title !== task.title) {
+        updateAsteroidLabel(a, task.title);
+      }
     } else {
       const asteroid = createAsteroidMesh(task, index, totalTasks);
       (asteroid.mesh.userData as { task?: Task }).task = task;
@@ -562,6 +644,7 @@ export function setTasks(tasks: Task[]): void {
       scene.add(asteroid.mesh);
       scene.add(asteroid.flame);
       scene.add(asteroid.routeLine);
+      scene.add(asteroid.label);
       asteroids.set(task.id, asteroid);
     }
   });
@@ -583,6 +666,8 @@ export function stopWallpaper(): void {
     removeAsteroidImmediately(a.taskId, a);
   });
   asteroids.clear();
+  planetShieldPulses.forEach((pulse) => disposePlanetShieldPulse(pulse));
+  planetShieldPulses = [];
   completionEffects.forEach((effect) => disposeCompletionEffect(effect));
   completionEffects.clear();
   if (starBackground) {
