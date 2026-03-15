@@ -64,7 +64,12 @@ electron_1.ipcMain.handle('add-task', (_event, task) => {
     return full;
 });
 electron_1.ipcMain.handle('update-task', (_event, id, updates) => {
+    const before = (0, database_1.getTaskById)(id);
+    const becameCompleted = before && !before.completed && updates.completed === true;
     (0, database_1.updateTask)(id, updates);
+    if (becameCompleted) {
+        mainWindow?.webContents.send('task-completed', id);
+    }
     broadcastTasksUpdate();
 });
 electron_1.ipcMain.handle('delete-task', (_event, id) => {

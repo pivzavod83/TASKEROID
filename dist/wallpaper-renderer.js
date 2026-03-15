@@ -18782,6 +18782,32 @@
       }
     }
   };
+  var _start = /* @__PURE__ */ new Vector3();
+  var _end = /* @__PURE__ */ new Vector3();
+  var LineSegments = class extends Line {
+    constructor(geometry, material) {
+      super(geometry, material);
+      this.isLineSegments = true;
+      this.type = "LineSegments";
+    }
+    computeLineDistances() {
+      const geometry = this.geometry;
+      if (geometry.index === null) {
+        const positionAttribute = geometry.attributes.position;
+        const lineDistances = [];
+        for (let i = 0, l = positionAttribute.count; i < l; i += 2) {
+          _start.fromBufferAttribute(positionAttribute, i);
+          _end.fromBufferAttribute(positionAttribute, i + 1);
+          lineDistances[i] = i === 0 ? 0 : lineDistances[i - 1];
+          lineDistances[i + 1] = lineDistances[i] + _start.distanceTo(_end);
+        }
+        geometry.setAttribute("lineDistance", new Float32BufferAttribute(lineDistances, 1));
+      } else {
+        console.warn("THREE.LineSegments.computeLineDistances(): Computation only possible with non-indexed BufferGeometry.");
+      }
+      return this;
+    }
+  };
   var PointsMaterial = class extends Material {
     constructor(parameters) {
       super();
@@ -20973,8 +20999,181 @@
   var asteroidEditPopup = null;
   var asteroidEditBackdrop = null;
   var planetScaleCurrent = 1;
+  var completionEffects = /* @__PURE__ */ new Map();
   var HOVER_SCALE = 1.12;
   var PLANET_SCALE_LERP = 10;
+  function createExplosionTexture() {
+    const canvas2 = document.createElement("canvas");
+    canvas2.width = 256;
+    canvas2.height = 256;
+    const ctx = canvas2.getContext("2d");
+    const cx = canvas2.width / 2;
+    const cy = canvas2.height / 2;
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, canvas2.width * 0.45);
+    grad.addColorStop(0, "rgba(255, 245, 170, 1)");
+    grad.addColorStop(0.22, "rgba(255, 188, 88, 0.95)");
+    grad.addColorStop(0.52, "rgba(255, 96, 46, 0.68)");
+    grad.addColorStop(0.85, "rgba(255, 44, 30, 0.2)");
+    grad.addColorStop(1, "rgba(255, 44, 30, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, canvas2.width * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+    const tex = new CanvasTexture(canvas2);
+    tex.needsUpdate = true;
+    return tex;
+  }
+  function removeAsteroidImmediately(taskId, asteroid) {
+    scene.remove(asteroid.mesh);
+    scene.remove(asteroid.routeLine);
+    disposeAsteroidMesh(asteroid);
+    asteroids.delete(taskId);
+  }
+  function disposeCompletionEffect(effect) {
+    scene.remove(effect.lockGroup);
+    scene.remove(effect.beam);
+    scene.remove(effect.explosion);
+    effect.lockRing.geometry.dispose();
+    effect.lockRing.material.dispose();
+    effect.lockCrosshair.geometry.dispose();
+    effect.lockCrosshair.material.dispose();
+    effect.beam.geometry.dispose();
+    effect.beam.material.dispose();
+    const expMat = effect.explosion.material;
+    expMat.map?.dispose();
+    expMat.dispose();
+  }
+  function createCompletionEffect(taskId, asteroid) {
+    const pos = asteroid.mesh.position.clone();
+    const ring = new Mesh(
+      new RingGeometry(0.38, 0.44, 64),
+      new MeshBasicMaterial({
+        color: 58836,
+        transparent: true,
+        opacity: 0.95,
+        side: DoubleSide,
+        depthWrite: false
+      })
+    );
+    const crossGeom = new BufferGeometry().setFromPoints([
+      new Vector3(-0.68, 0, 0),
+      new Vector3(-0.2, 0, 0),
+      new Vector3(0.2, 0, 0),
+      new Vector3(0.68, 0, 0),
+      new Vector3(0, -0.68, 0),
+      new Vector3(0, -0.2, 0),
+      new Vector3(0, 0.2, 0),
+      new Vector3(0, 0.68, 0)
+    ]);
+    const crosshair = new LineSegments(
+      crossGeom,
+      new LineBasicMaterial({
+        color: 7798768,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false
+      })
+    );
+    const lockGroup = new Group();
+    lockGroup.position.copy(pos);
+    lockGroup.position.z = 0.08;
+    lockGroup.add(ring);
+    lockGroup.add(crosshair);
+    scene.add(lockGroup);
+    const beamGeom = new BufferGeometry().setFromPoints([
+      new Vector3(0, 0, -0.08),
+      new Vector3(pos.x, pos.y, -0.08)
+    ]);
+    const beam = new Line(
+      beamGeom,
+      new LineBasicMaterial({
+        color: 16738877,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false
+      })
+    );
+    scene.add(beam);
+    const explosionTex = createExplosionTexture();
+    const explosionMat = new SpriteMaterial({
+      map: explosionTex,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      color: 16777215
+    });
+    const explosion = new Sprite(explosionMat);
+    explosion.position.copy(pos);
+    explosion.position.z = 0.09;
+    explosion.scale.set(0.4, 0.4, 1);
+    scene.add(explosion);
+    return {
+      taskId,
+      asteroid,
+      lockGroup,
+      lockRing: ring,
+      lockCrosshair: crosshair,
+      beam,
+      explosion,
+      elapsed: 0,
+      duration: 1.25,
+      finished: false
+    };
+  }
+  function updateCompletionEffects(deltaSec) {
+    completionEffects.forEach((effect, taskId) => {
+      effect.elapsed += deltaSec;
+      const t = Math.min(1, effect.elapsed / effect.duration);
+      const lockT = Math.min(1, t / 0.46);
+      const shotT = Math.min(1, Math.max(0, (t - 0.42) / 0.22));
+      const boomT = Math.min(1, Math.max(0, (t - 0.6) / 0.4));
+      const pulse = 0.92 + Math.sin(effect.elapsed * 17) * 0.06;
+      effect.lockGroup.scale.setScalar((1.28 - lockT * 0.46) * pulse);
+      effect.lockGroup.rotation.z += deltaSec * 1.6;
+      const ringMat = effect.lockRing.material;
+      const crossMat = effect.lockCrosshair.material;
+      ringMat.opacity = (1 - boomT) * (0.75 + (1 - lockT) * 0.2);
+      crossMat.opacity = (1 - boomT) * (0.8 + (1 - lockT) * 0.15);
+      const beamMat = effect.beam.material;
+      beamMat.opacity = Math.sin(shotT * Math.PI) * 0.95 * (1 - boomT * 0.4);
+      const asteroidMat = effect.asteroid.mesh.material;
+      if (boomT > 0) {
+        asteroidMat.opacity = Math.max(0, 1 - boomT * 1.35);
+        const kick = 1 + boomT * 0.14;
+        effect.asteroid.mesh.scale.set(
+          effect.asteroid.currentScale * kick,
+          effect.asteroid.currentScale * kick,
+          1
+        );
+      }
+      const expMat = effect.explosion.material;
+      expMat.opacity = Math.max(0, Math.sin(boomT * Math.PI));
+      const explosionScale = 0.35 + boomT * 2.6;
+      effect.explosion.scale.set(explosionScale, explosionScale, 1);
+      if (t >= 1 && !effect.finished) {
+        effect.finished = true;
+        disposeCompletionEffect(effect);
+        removeAsteroidImmediately(taskId, effect.asteroid);
+        completionEffects.delete(taskId);
+      }
+    });
+  }
+  function playTaskCompleteAnimation(taskId) {
+    if (!scene)
+      return;
+    if (completionEffects.has(taskId))
+      return;
+    const asteroid = asteroids.get(taskId);
+    if (!asteroid)
+      return;
+    if (hoveredAsteroid?.taskId === taskId) {
+      hoveredAsteroid = null;
+      hideTooltip();
+    }
+    asteroid.routeLine.visible = false;
+    const effect = createCompletionEffect(taskId, asteroid);
+    completionEffects.set(taskId, effect);
+  }
   function getCanvasViewportSize(canvas2) {
     const rect = canvas2.getBoundingClientRect();
     const width = Math.max(1, Math.floor(rect.width || window.innerWidth));
@@ -21183,15 +21382,15 @@
       planetScaleCurrent = MathUtils.lerp(planetScaleCurrent, targetScale, Math.min(1, deltaSec * PLANET_SCALE_LERP));
       planet.scale.setScalar(planetScaleCurrent);
       planet.rotation.y += 0.02 * deltaSec;
+      updateCompletionEffects(deltaSec);
       asteroids.forEach((asteroid, taskId) => {
+        if (completionEffects.has(taskId))
+          return;
         const task = asteroid.mesh.userData.task;
         if (!task)
           return;
         if (hasCollided(task, now)) {
-          scene.remove(asteroid.mesh);
-          scene.remove(asteroid.routeLine);
-          disposeAsteroidMesh(asteroid);
-          asteroids.delete(taskId);
+          removeAsteroidImmediately(taskId, asteroid);
           onCollision?.(taskId);
           return;
         }
@@ -21218,10 +21417,9 @@
     const ids = new Set(tasks.map((t) => t.id));
     asteroids.forEach((asteroid, taskId) => {
       if (!ids.has(taskId)) {
-        scene.remove(asteroid.mesh);
-        scene.remove(asteroid.routeLine);
-        disposeAsteroidMesh(asteroid);
-        asteroids.delete(taskId);
+        if (completionEffects.has(taskId))
+          return;
+        removeAsteroidImmediately(taskId, asteroid);
       }
     });
     const now = Date.now() / 1e3;
@@ -21261,11 +21459,11 @@
     document.getElementById("asteroid-edit-popup")?.classList.remove("open");
     document.getElementById("asteroid-edit-backdrop")?.classList.remove("open");
     asteroids.forEach((a) => {
-      scene.remove(a.mesh);
-      scene.remove(a.routeLine);
-      disposeAsteroidMesh(a);
+      removeAsteroidImmediately(a.taskId, a);
     });
     asteroids.clear();
+    completionEffects.forEach((effect) => disposeCompletionEffect(effect));
+    completionEffects.clear();
     if (starBackground) {
       scene.remove(starBackground.group);
       disposeStarBackground(starBackground);
@@ -21290,6 +21488,9 @@
   loadTasks();
   window.taskeroid?.onTasksUpdate?.((tasks) => {
     setTasks(tasks || []);
+  });
+  window.taskeroid?.onTaskCompleted?.((taskId) => {
+    playTaskCompleteAnimation(taskId);
   });
   window.addEventListener("beforeunload", stopWallpaper);
 })();

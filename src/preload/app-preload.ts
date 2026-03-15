@@ -8,6 +8,11 @@ contextBridge.exposeInMainWorld('taskeroid', {
   onTasksUpdate: (callback: (tasks: unknown[]) => void) => {
     ipcRenderer.on('tasks-updated', (_event, tasks) => callback(tasks));
   },
+  onTaskCompleted: (callback: (taskId: string) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, taskId: string) => callback(taskId);
+    ipcRenderer.on('task-completed', handler);
+    return () => ipcRenderer.removeListener('task-completed', handler);
+  },
   reportCollision: (taskId: string) => {
     ipcRenderer.send('asteroid-collision', taskId);
   },

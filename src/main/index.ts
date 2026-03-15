@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import {
   getAllTasks,
+  getTaskById,
   addTask,
   updateTask,
   deleteTask,
@@ -78,7 +79,15 @@ ipcMain.handle('add-task', (_event, task: Omit<Task, 'id' | 'created_at'>) => {
 });
 
 ipcMain.handle('update-task', (_event, id: string, updates: Partial<Task>) => {
+  const before = getTaskById(id);
+  const becameCompleted = before && !before.completed && updates.completed === true;
+
   updateTask(id, updates);
+
+  if (becameCompleted) {
+    mainWindow?.webContents.send('task-completed', id);
+  }
+
   broadcastTasksUpdate();
 });
 

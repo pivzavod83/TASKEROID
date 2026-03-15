@@ -45,9 +45,218 @@ let hoveredPlanet = false;
 let asteroidEditPopup: HTMLDivElement | null = null;
 let asteroidEditBackdrop: HTMLDivElement | null = null;
 let planetScaleCurrent = 1;
+let completionEffects: Map<string, CompletionEffect> = new Map();
 
 const HOVER_SCALE = 1.12;
 const PLANET_SCALE_LERP = 10;
+
+interface CompletionEffect {
+  taskId: string;
+  asteroid: AsteroidMesh;
+  lockGroup: THREE.Group;
+  lockRing: THREE.Mesh;
+  lockCrosshair: THREE.LineSegments;
+  beam: THREE.Line;
+  explosion: THREE.Sprite;
+  elapsed: number;
+  duration: number;
+  finished: boolean;
+}
+
+function createExplosionTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, canvas.width * 0.45);
+  grad.addColorStop(0, 'rgba(255, 245, 170, 1)');
+  grad.addColorStop(0.22, 'rgba(255, 188, 88, 0.95)');
+  grad.addColorStop(0.52, 'rgba(255, 96, 46, 0.68)');
+  grad.addColorStop(0.85, 'rgba(255, 44, 30, 0.2)');
+  grad.addColorStop(1, 'rgba(255, 44, 30, 0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, canvas.width * 0.45, 0, Math.PI * 2);
+  ctx.fill();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function removeAsteroidImmediately(taskId: string, asteroid: AsteroidMesh): void {
+  scene.remove(asteroid.mesh);
+  scene.remove(asteroid.routeLine);
+  disposeAsteroidMesh(asteroid);
+  asteroids.delete(taskId);
+}
+
+function disposeCompletionEffect(effect: CompletionEffect): void {
+  scene.remove(effect.lockGroup);
+  scene.remove(effect.beam);
+  scene.remove(effect.explosion);
+
+  effect.lockRing.geometry.dispose();
+  (effect.lockRing.material as THREE.Material).dispose();
+  effect.lockCrosshair.geometry.dispose();
+  (effect.lockCrosshair.material as THREE.Material).dispose();
+  effect.beam.geometry.dispose();
+  (effect.beam.material as THREE.Material).dispose();
+
+  const expMat = effect.explosion.material as THREE.SpriteMaterial;
+  expMat.map?.dispose();
+  expMat.dispose();
+}
+
+function createCompletionEffect(taskId: string, asteroid: AsteroidMesh): CompletionEffect {
+  const pos = asteroid.mesh.position.clone();
+
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.38, 0.44, 64),
+    new THREE.MeshBasicMaterial({
+      color: 0x00e5d4,
+      transparent: true,
+      opacity: 0.95,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    })
+  );
+
+  const crossGeom = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(-0.68, 0, 0),
+    new THREE.Vector3(-0.2, 0, 0),
+    new THREE.Vector3(0.2, 0, 0),
+    new THREE.Vector3(0.68, 0, 0),
+    new THREE.Vector3(0, -0.68, 0),
+    new THREE.Vector3(0, -0.2, 0),
+    new THREE.Vector3(0, 0.2, 0),
+    new THREE.Vector3(0, 0.68, 0),
+  ]);
+  const crosshair = new THREE.LineSegments(
+    crossGeom,
+    new THREE.LineBasicMaterial({
+      color: 0x76fff0,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+    })
+  );
+
+  const lockGroup = new THREE.Group();
+  lockGroup.position.copy(pos);
+  lockGroup.position.z = 0.08;
+  lockGroup.add(ring);
+  lockGroup.add(crosshair);
+  scene.add(lockGroup);
+
+  const beamGeom = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, 0, -0.08),
+    new THREE.Vector3(pos.x, pos.y, -0.08),
+  ]);
+  const beam = new THREE.Line(
+    beamGeom,
+    new THREE.LineBasicMaterial({
+      color: 0xff6a3d,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    })
+  );
+  scene.add(beam);
+
+  const explosionTex = createExplosionTexture();
+  const explosionMat = new THREE.SpriteMaterial({
+    map: explosionTex,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    color: 0xffffff,
+  });
+  const explosion = new THREE.Sprite(explosionMat);
+  explosion.position.copy(pos);
+  explosion.position.z = 0.09;
+  explosion.scale.set(0.4, 0.4, 1);
+  scene.add(explosion);
+
+  return {
+    taskId,
+    asteroid,
+    lockGroup,
+    lockRing: ring,
+    lockCrosshair: crosshair,
+    beam,
+    explosion,
+    elapsed: 0,
+    duration: 1.25,
+    finished: false,
+  };
+}
+
+function updateCompletionEffects(deltaSec: number): void {
+  completionEffects.forEach((effect, taskId) => {
+    effect.elapsed += deltaSec;
+    const t = Math.min(1, effect.elapsed / effect.duration);
+    const lockT = Math.min(1, t / 0.46);
+    const shotT = Math.min(1, Math.max(0, (t - 0.42) / 0.22));
+    const boomT = Math.min(1, Math.max(0, (t - 0.6) / 0.4));
+
+    const pulse = 0.92 + Math.sin(effect.elapsed * 17) * 0.06;
+    effect.lockGroup.scale.setScalar((1.28 - lockT * 0.46) * pulse);
+    effect.lockGroup.rotation.z += deltaSec * 1.6;
+
+    const ringMat = effect.lockRing.material as THREE.MeshBasicMaterial;
+    const crossMat = effect.lockCrosshair.material as THREE.LineBasicMaterial;
+    ringMat.opacity = (1 - boomT) * (0.75 + (1 - lockT) * 0.2);
+    crossMat.opacity = (1 - boomT) * (0.8 + (1 - lockT) * 0.15);
+
+    const beamMat = effect.beam.material as THREE.LineBasicMaterial;
+    beamMat.opacity = Math.sin(shotT * Math.PI) * 0.95 * (1 - boomT * 0.4);
+
+    const asteroidMat = effect.asteroid.mesh.material as THREE.SpriteMaterial;
+    if (boomT > 0) {
+      asteroidMat.opacity = Math.max(0, 1 - boomT * 1.35);
+      const kick = 1 + boomT * 0.14;
+      effect.asteroid.mesh.scale.set(
+        effect.asteroid.currentScale * kick,
+        effect.asteroid.currentScale * kick,
+        1
+      );
+    }
+
+    const expMat = effect.explosion.material as THREE.SpriteMaterial;
+    expMat.opacity = Math.max(0, Math.sin(boomT * Math.PI));
+    const explosionScale = 0.35 + boomT * 2.6;
+    effect.explosion.scale.set(explosionScale, explosionScale, 1);
+
+    if (t >= 1 && !effect.finished) {
+      effect.finished = true;
+      disposeCompletionEffect(effect);
+      removeAsteroidImmediately(taskId, effect.asteroid);
+      completionEffects.delete(taskId);
+    }
+  });
+}
+
+export function playTaskCompleteAnimation(taskId: string): void {
+  if (!scene) return;
+  if (completionEffects.has(taskId)) return;
+
+  const asteroid = asteroids.get(taskId);
+  if (!asteroid) return;
+
+  if (hoveredAsteroid?.taskId === taskId) {
+    hoveredAsteroid = null;
+    hideTooltip();
+  }
+
+  asteroid.routeLine.visible = false;
+
+  const effect = createCompletionEffect(taskId, asteroid);
+  completionEffects.set(taskId, effect);
+}
 
 function getCanvasViewportSize(canvas: HTMLCanvasElement): { width: number; height: number } {
   const rect = canvas.getBoundingClientRect();
@@ -283,14 +492,14 @@ export function initWallpaper(canvas: HTMLCanvasElement, onCollision?: (taskId: 
     planet.scale.setScalar(planetScaleCurrent);
     planet.rotation.y += 0.02 * deltaSec;
 
+    updateCompletionEffects(deltaSec);
+
     asteroids.forEach((asteroid, taskId) => {
+      if (completionEffects.has(taskId)) return;
       const task = (asteroid.mesh.userData as { task?: Task }).task;
       if (!task) return;
       if (hasCollided(task, now)) {
-        scene.remove(asteroid.mesh);
-        scene.remove(asteroid.routeLine);
-        disposeAsteroidMesh(asteroid);
-        asteroids.delete(taskId);
+        removeAsteroidImmediately(taskId, asteroid);
         onCollision?.(taskId);
         return;
       }
@@ -322,10 +531,8 @@ export function setTasks(tasks: Task[]): void {
 
   asteroids.forEach((asteroid, taskId) => {
     if (!ids.has(taskId)) {
-      scene.remove(asteroid.mesh);
-      scene.remove(asteroid.routeLine);
-      disposeAsteroidMesh(asteroid);
-      asteroids.delete(taskId);
+      if (completionEffects.has(taskId)) return;
+      removeAsteroidImmediately(taskId, asteroid);
     }
   });
 
@@ -370,11 +577,11 @@ export function stopWallpaper(): void {
   document.getElementById('asteroid-edit-popup')?.classList.remove('open');
   document.getElementById('asteroid-edit-backdrop')?.classList.remove('open');
   asteroids.forEach((a) => {
-    scene.remove(a.mesh);
-    scene.remove(a.routeLine);
-    disposeAsteroidMesh(a);
+    removeAsteroidImmediately(a.taskId, a);
   });
   asteroids.clear();
+  completionEffects.forEach((effect) => disposeCompletionEffect(effect));
+  completionEffects.clear();
   if (starBackground) {
     scene.remove(starBackground.group);
     disposeStarBackground(starBackground);

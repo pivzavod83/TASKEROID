@@ -1,13 +1,19 @@
 /**
  * Wallpaper renderer entry - runs in wallpaper BrowserWindow
  */
-import { initWallpaper, setTasks, stopWallpaper } from './wallpaper-loop';
+import {
+  initWallpaper,
+  setTasks,
+  stopWallpaper,
+  playTaskCompleteAnimation,
+} from './wallpaper-loop';
 
 declare const window: Window & {
   taskeroid?: {
     getTasks: () => Promise<unknown[]>;
     onTasksUpdate: (callback: (tasks: unknown[]) => void) => void;
-    onCollision: (callback: (taskId: string) => void) => void;
+    onTaskCompleted?: (callback: (taskId: string) => void) => (() => void) | void;
+    reportCollision?: (taskId: string) => void;
   };
 };
 
@@ -37,6 +43,10 @@ initWallpaper(canvas, (taskId) => {
 loadTasks();
 window.taskeroid?.onTasksUpdate?.((tasks) => {
   setTasks((tasks || []) as TaskData[]);
+});
+
+window.taskeroid?.onTaskCompleted?.((taskId) => {
+  playTaskCompleteAnimation(taskId);
 });
 
 window.addEventListener('beforeunload', stopWallpaper);
