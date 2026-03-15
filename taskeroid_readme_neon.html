@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --neon-green: #00ff9f;
+    --neon-cyan: #00e5ff;
+    --neon-orange: #ff6b35;
+    --neon-red: #ff3c5a;
+    --neon-yellow: #ffe600;
+    --bg-deep: #020a0f;
+    --bg-panel: #041118;
+    --bg-grid: #051a24;
+    --grid-line: rgba(0,229,255,0.06);
+    --text-primary: #c8f5ff;
+    --text-dim: rgba(200,245,255,0.45);
+    --font-hud: 'Share Tech Mono', monospace;
+    --font-title: 'Orbitron', sans-serif;
+  }
+
+  body {
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: var(--font-hud);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated grid background */
+  .grid-bg {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .grid-bg::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(0,229,255,0.04) 0%, transparent 70%);
+  }
+
+  .content { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  /* ── HEADER ── */
+  .header {
+    text-align: center;
+    padding: 60px 0 40px;
+    position: relative;
+  }
+
+  .radar-ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -60%);
+    width: 520px;
+    height: 520px;
+    border-radius: 50%;
+    border: 1px solid rgba(0,229,255,0.08);
+    pointer-events: none;
+  }
+  .radar-ring::before {
+    content: '';
+    position: absolute;
+    inset: 20px;
+    border-radius: 50%;
+    border: 1px solid rgba(0,255,159,0.06);
+  }
+  .radar-ring::after {
+    content: '';
+    position: absolute;
+    inset: 60px;
+    border-radius: 50%;
+    border: 1px solid rgba(0,229,255,0.05);
+  }
+
+  /* Spinning radar sweep */
+  @keyframes sweep {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .radar-sweep {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 50%;
+    height: 2px;
+    transform-origin: left center;
+    animation: sweep 4s linear infinite;
+  }
+  .radar-sweep-line {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 260px;
+    height: 2px;
+    transform-origin: left center;
+    background: linear-gradient(90deg, rgba(0,255,159,0.9), transparent);
+    border-radius: 2px;
+    animation: sweep 4s linear infinite;
+    filter: blur(0.5px);
+  }
+  .radar-sweep-glow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 260px;
+    height: 8px;
+    margin-top: -3px;
+    transform-origin: left center;
+    background: linear-gradient(90deg, rgba(0,255,159,0.3), transparent);
+    border-radius: 4px;
+    animation: sweep 4s linear infinite;
+    filter: blur(3px);
+  }
+
+  .tagline {
+    font-family: var(--font-hud);
+    font-size: 11px;
+    letter-spacing: 5px;
+    color: var(--neon-cyan);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    opacity: 0.7;
+  }
+
+  h1 {
+    font-family: var(--font-title);
+    font-size: clamp(42px, 8vw, 76px);
+    font-weight: 900;
+    letter-spacing: 12px;
+    line-height: 1;
+    text-transform: uppercase;
+    background: linear-gradient(135deg, #00e5ff 0%, #00ff9f 50%, #00e5ff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 0 30px rgba(0,229,255,0.4));
+    margin-bottom: 20px;
+    position: relative;
+  }
+
+  .subtitle {
+    font-size: 13px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    max-width: 500px;
+    margin: 0 auto;
+    line-height: 1.8;
+  }
+
+  .subtitle em {
+    color: var(--neon-green);
+    font-style: normal;
+  }
+
+  /* ── LIVE STATUS BAR ── */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 10px 20px;
+    border: 1px solid rgba(0,229,255,0.15);
+    border-left: 3px solid var(--neon-cyan);
+    background: rgba(0,229,255,0.03);
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    margin: 40px 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  @keyframes scan-line {
+    0% { left: -100%; }
+    100% { left: 200%; }
+  }
+
+  .status-bar::after {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 40%;
+    background: linear-gradient(90deg, transparent, rgba(0,229,255,0.04), transparent);
+    animation: scan-line 3s linear infinite;
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--neon-green);
+    box-shadow: 0 0 8px var(--neon-green);
+    flex-shrink: 0;
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--neon-green); }
+    50% { opacity: 0.6; box-shadow: 0 0 3px var(--neon-green); }
+  }
+
+  .status-sep { opacity: 0.3; }
+
+  /* ── SECTION HEADERS ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 50px 0 20px;
+  }
+
+  .section-num {
+    font-family: var(--font-title);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: var(--neon-cyan);
+    opacity: 0.6;
+  }
+
+  .section-line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(0,229,255,0.3), transparent);
+  }
+
+  h2 {
+    font-family: var(--font-title);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 5px;
+    text-transform: uppercase;
+    color: var(--neon-cyan);
+  }
+
+  /* ── MAIN DESCRIPTION BLOCK ── */
+  .mission-block {
+    border: 1px solid rgba(0,229,255,0.12);
+    border-left: 2px solid rgba(0,229,255,0.4);
+    background: rgba(0,229,255,0.02);
+    padding: 28px 32px;
+    margin-bottom: 32px;
+    position: relative;
+  }
+
+  .mission-block::before {
+    content: 'MISSION BRIEFING';
+    position: absolute;
+    top: -9px;
+    left: 20px;
+    font-size: 9px;
+    letter-spacing: 4px;
+    color: var(--neon-cyan);
+    background: var(--bg-deep);
+    padding: 0 8px;
+    opacity: 0.6;
+  }
+
+  .mission-block p {
+    font-size: 13px;
+    line-height: 2;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+  }
+
+  .mission-block p:last-child { margin-bottom: 0; }
+
+  .mission-block strong {
+    color: var(--neon-green);
+    font-weight: 400;
+  }
+
+  /* ── FEATURE GRID ── */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    margin: 8px 0;
+  }
+
+  .feature-card {
+    background: var(--bg-panel);
+    border: 1px solid rgba(0,229,255,0.08);
+    padding: 20px 22px;
+    position: relative;
+    transition: border-color 0.2s, background 0.2s;
+    cursor: default;
+  }
+
+  .feature-card:hover {
+    border-color: rgba(0,229,255,0.3);
+    background: rgba(0,229,255,0.04);
+  }
+
+  .feature-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: var(--card-accent, var(--neon-cyan));
+    opacity: 0.5;
+  }
+
+  .feature-icon {
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--card-accent, var(--neon-cyan));
+    margin-bottom: 8px;
+    opacity: 0.8;
+  }
+
+  .feature-title {
+    font-family: var(--font-title);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+
+  .feature-desc {
+    font-size: 12px;
+    line-height: 1.8;
+    color: var(--text-dim);
+  }
+
+  /* ── BRANCHES ── */
+  .branch-list { display: flex; flex-direction: column; gap: 3px; }
+
+  .branch-item {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    align-items: start;
+    gap: 0;
+    border: 1px solid rgba(0,229,255,0.08);
+    background: var(--bg-panel);
+    overflow: hidden;
+    transition: border-color 0.2s;
+    cursor: default;
+  }
+
+  .branch-item:hover { border-color: rgba(0,255,159,0.25); }
+
+  .branch-tag {
+    background: rgba(0,255,159,0.05);
+    border-right: 1px solid rgba(0,229,255,0.1);
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .branch-name {
+    font-family: var(--font-title);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: var(--neon-green);
+    text-transform: uppercase;
+  }
+
+  .branch-badge {
+    font-size: 9px;
+    letter-spacing: 2px;
+    padding: 2px 8px;
+    border: 1px solid rgba(0,229,255,0.2);
+    color: var(--text-dim);
+    width: fit-content;
+  }
+
+  .branch-desc {
+    padding: 18px 24px;
+  }
+
+  .branch-desc strong {
+    display: block;
+    font-size: 12px;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+    font-weight: 400;
+    letter-spacing: 1px;
+  }
+
+  .branch-desc span {
+    font-size: 12px;
+    line-height: 1.8;
+    color: var(--text-dim);
+  }
+
+  /* ── CTA BLOCK ── */
+  .cta-block {
+    margin-top: 50px;
+    border: 1px solid rgba(0,229,255,0.15);
+    background: rgba(0,229,255,0.02);
+    padding: 32px 36px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cta-block::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(0,255,159,0.02), transparent);
+    animation: scan-line 5s linear infinite;
+  }
+
+  .cta-text .label {
+    font-size: 10px;
+    letter-spacing: 4px;
+    color: var(--neon-cyan);
+    opacity: 0.6;
+    margin-bottom: 8px;
+  }
+
+  .cta-text .headline {
+    font-family: var(--font-title);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: var(--text-primary);
+    text-transform: uppercase;
+  }
+
+  .cta-btn {
+    padding: 14px 28px;
+    background: transparent;
+    border: 1px solid var(--neon-green);
+    color: var(--neon-green);
+    font-family: var(--font-hud);
+    font-size: 11px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+    text-decoration: none;
+    transition: background 0.2s, box-shadow 0.2s;
+    box-shadow: 0 0 12px rgba(0,255,159,0.1), inset 0 0 12px rgba(0,255,159,0.03);
+  }
+
+  .cta-btn:hover {
+    background: rgba(0,255,159,0.08);
+    box-shadow: 0 0 24px rgba(0,255,159,0.25), inset 0 0 20px rgba(0,255,159,0.06);
+  }
+
+  /* ── THREAT VISUAL ── */
+  .threat-visual {
+    position: relative;
+    height: 220px;
+    margin: 16px 0 32px;
+    border: 1px solid rgba(0,229,255,0.08);
+    background: var(--bg-panel);
+    overflow: hidden;
+  }
+
+  .threat-visual canvas { width: 100%; height: 100%; }
+
+  .threat-label {
+    position: absolute;
+    top: 12px;
+    left: 16px;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--neon-cyan);
+    opacity: 0.5;
+    text-transform: uppercase;
+  }
+
+  .threat-coords {
+    position: absolute;
+    bottom: 12px;
+    right: 16px;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    opacity: 0.4;
+  }
+
+  /* ── FOOTER ── */
+  .footer {
+    margin-top: 60px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(0,229,255,0.08);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--text-dim);
+    opacity: 0.4;
+  }
+
+  /* ── SCANLINE OVERLAY ── */
+  .scanlines {
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 3px,
+      rgba(0,0,0,0.04) 3px,
+      rgba(0,0,0,0.04) 4px
+    );
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  @media (max-width: 600px) {
+    .feature-grid { grid-template-columns: 1fr; }
+    .branch-item { grid-template-columns: 1fr; }
+    .branch-tag { border-right: none; border-bottom: 1px solid rgba(0,229,255,0.1); }
+    .cta-block { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+<div class="scanlines"></div>
+
+<div class="content">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="radar-ring">
+      <div class="radar-sweep-glow"></div>
+      <div class="radar-sweep-line"></div>
+    </div>
+    <div class="tagline">// ORBITAL COMMAND SYSTEM — v2.0</div>
+    <h1>TASKEROID</h1>
+    <div class="subtitle">
+      A <em>cinematic</em> task commander.<br>
+      Every deadline is <em>orbital pressure</em>.<br>
+      Every task is an <em>incoming threat</em>.<br>
+      Your planet must survive.
+    </div>
+  </div>
+
+  <!-- STATUS BAR -->
+  <div class="status-bar">
+    <div class="status-dot"></div>
+    <span>SYSTEM ONLINE</span>
+    <span class="status-sep">|</span>
+    <span>3 ACTIVE BRANCHES</span>
+    <span class="status-sep">|</span>
+    <span>THREAT ASSESSMENT: OPERATIONAL</span>
+    <span class="status-sep">|</span>
+    <span style="color:var(--neon-green)">ALL SYSTEMS NOMINAL</span>
+  </div>
+
+  <!-- MISSION BRIEFING -->
+  <div class="section-header">
+    <span class="section-num">01</span>
+    <h2>Mission Briefing</h2>
+    <div class="section-line"></div>
+  </div>
+
+  <div class="mission-block">
+    <p>
+      Taskeroid is not a to-do list. It is a <strong>living space simulation</strong>
+      — your work rendered as an asteroid field closing in on a planet.
+      Deadlines become <strong>orbital pressure</strong>. Priority becomes
+      <strong>gravitational mass</strong>.
+    </p>
+    <p>
+      The closer the deadline, the closer the asteroid gets.
+      The higher the importance, the <strong>bigger the threat</strong>.
+    </p>
+    <p>
+      You do not just track tasks. <strong>You command a system under pressure.</strong>
+    </p>
+  </div>
+
+  <!-- RADAR CANVAS -->
+  <div class="threat-visual">
+    <div class="threat-label">◈ LIVE THREAT DISPLAY</div>
+    <div class="threat-coords" id="coords">ORBIT: 0.00 / 0.00</div>
+    <canvas id="radarCanvas"></canvas>
+  </div>
+
+  <!-- WHY DIFFERENT -->
+  <div class="section-header">
+    <span class="section-num">02</span>
+    <h2>Combat Advantages</h2>
+    <div class="section-line"></div>
+  </div>
+
+  <div class="feature-grid">
+    <div class="feature-card" style="--card-accent: var(--neon-cyan)">
+      <div class="feature-icon">◈ VISUAL</div>
+      <div class="feature-title">Orbital Urgency</div>
+      <div class="feature-desc">Deadlines feel real. You can see them closing in — not as numbers, but as mass and distance.</div>
+    </div>
+    <div class="feature-card" style="--card-accent: var(--neon-green)">
+      <div class="feature-icon">◉ PRIORITY</div>
+      <div class="feature-title">Mass = Threat</div>
+      <div class="feature-desc">Important tasks are physically larger. Priority reads at a glance, across the entire field.</div>
+    </div>
+    <div class="feature-card" style="--card-accent: var(--neon-orange)">
+      <div class="feature-icon">◌ FOCUS</div>
+      <div class="feature-title">Isolation Mode</div>
+      <div class="feature-desc">Lock onto one mission. Dim the noise. Full targeting on a single incoming object.</div>
+    </div>
+    <div class="feature-card" style="--card-accent: var(--neon-yellow)">
+      <div class="feature-icon">⬡ CHAIN</div>
+      <div class="feature-title">Dependency Web</div>
+      <div class="feature-desc">Block tasks until prerequisites clear. Mission chains. No task moves without authorization.</div>
+    </div>
+    <div class="feature-card" style="--card-accent: var(--neon-red)">
+      <div class="feature-icon">↻ CYCLE</div>
+      <div class="feature-title">Regenerative Logic</div>
+      <div class="feature-desc">Daily and weekly tasks regenerate automatically. Recurring threats are always in the field.</div>
+    </div>
+    <div class="feature-card" style="--card-accent: var(--neon-cyan)">
+      <div class="feature-icon">⌬ IMMERSIVE</div>
+      <div class="feature-title">Futuristic HUD</div>
+      <div class="feature-desc">Animated completion effects. Interactive planet. Full HUD panel. No spreadsheet aesthetics.</div>
+    </div>
+  </div>
+
+  <!-- BRANCH SELECTION -->
+  <div class="section-header">
+    <span class="section-num">03</span>
+    <h2>Repository Branches</h2>
+    <div class="section-line"></div>
+  </div>
+
+  <div class="branch-list">
+    <div class="branch-item">
+      <div class="branch-tag">
+        <div class="branch-name">app-dev</div>
+        <div class="branch-badge">WINDOWS</div>
+        <div class="branch-badge">ELECTRON</div>
+      </div>
+      <div class="branch-desc">
+        <strong>Windows Desktop Application</strong>
+        <span>Full interactive Taskeroid experience. Electron + Three.js + React. The complete orbital command interface for Windows operators.</span>
+      </div>
+    </div>
+    <div class="branch-item">
+      <div class="branch-tag">
+        <div class="branch-name">wb-dev</div>
+        <div class="branch-badge">PUBLIC WEB</div>
+        <div class="branch-badge">LANDING</div>
+      </div>
+      <div class="branch-desc">
+        <strong>Public Website</strong>
+        <span>Discovery and distribution surface. Where new operators find Taskeroid, read the briefing, and acquire available apps.</span>
+      </div>
+    </div>
+    <div class="branch-item">
+      <div class="branch-tag">
+        <div class="branch-name">mac-dev</div>
+        <div class="branch-badge">MACOS</div>
+        <div class="branch-badge">WALLPAPER</div>
+      </div>
+      <div class="branch-desc">
+        <strong>macOS Wallpaper Experience</strong>
+        <span>Visual command interface tailored for Mac. The orbital field as your desktop. Your mission always in view.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-block">
+    <div class="cta-text">
+      <div class="label">◈ READY FOR DEPLOYMENT</div>
+      <div class="headline">Select Your Branch — Begin the Mission</div>
+    </div>
+    <a class="cta-btn" href="https://taskeroid-production.up.railway.app/" target="_blank">LAUNCH →</a>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <span>TASKEROID // ORBITAL COMMAND v2.0</span>
+    <span>PRODUCTIVITY AS A WEAPON</span>
+  </div>
+
+</div>
+
+<script>
+// ── Animated radar canvas ──
+const canvas = document.getElementById('radarCanvas');
+const ctx = canvas.getContext('2d');
+const coordEl = document.getElementById('coords');
+
+function resize() {
+  canvas.width = canvas.offsetWidth * devicePixelRatio;
+  canvas.height = canvas.offsetHeight * devicePixelRatio;
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+}
+resize();
+window.addEventListener('resize', () => { resize(); });
+
+// Asteroids
+const asteroids = Array.from({length: 9}, (_, i) => ({
+  angle: (Math.PI * 2 / 9) * i + Math.random() * 0.4,
+  radius: 40 + Math.random() * 110,
+  speed: (0.0003 + Math.random() * 0.0008) * (Math.random() > 0.5 ? 1 : -1),
+  size: 3 + Math.random() * 8,
+  color: ['#00e5ff','#00ff9f','#ff6b35','#ffe600','#ff3c5a'][Math.floor(Math.random()*5)],
+  opacity: 0.6 + Math.random() * 0.4,
+  label: ['TASK-' + String(i+1).padStart(3,'0')][0]
+}));
+
+// Sweep angle
+let sweepAngle = 0;
+const trails = [];
+
+function draw(ts) {
+  const W = canvas.offsetWidth;
+  const H = canvas.offsetHeight;
+  const cx = W / 2;
+  const cy = H / 2;
+  const maxR = Math.min(W, H) * 0.46;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  ctx.fillStyle = '#041118';
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid rings
+  [0.25, 0.5, 0.75, 1].forEach(f => {
+    ctx.beginPath();
+    ctx.arc(cx, cy, maxR * f, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(0,229,255,${0.06 - f*0.01})`;
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+  });
+
+  // Cross hairs
+  ctx.strokeStyle = 'rgba(0,229,255,0.05)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(cx, cy - maxR); ctx.lineTo(cx, cy + maxR); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx - maxR, cy); ctx.lineTo(cx + maxR, cy); ctx.stroke();
+
+  // Sweep cone
+  const coneLength = 6;
+  for (let i = 0; i < coneLength; i++) {
+    const a = sweepAngle - (i * 0.12);
+    const alpha = (1 - i/coneLength) * 0.12;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, maxR, a - 0.08, a + 0.08);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(0,255,159,${alpha})`;
+    ctx.fill();
+  }
+
+  // Sweep line
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + Math.cos(sweepAngle) * maxR, cy + Math.sin(sweepAngle) * maxR);
+  ctx.strokeStyle = 'rgba(0,255,159,0.7)';
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = '#00ff9f';
+  ctx.shadowBlur = 8;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Center planet
+  const planetGrd = ctx.createRadialGradient(cx-2, cy-2, 1, cx, cy, 10);
+  planetGrd.addColorStop(0, 'rgba(0,229,255,0.9)');
+  planetGrd.addColorStop(0.6, 'rgba(0,150,200,0.6)');
+  planetGrd.addColorStop(1, 'rgba(0,50,100,0)');
+  ctx.beginPath();
+  ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+  ctx.fillStyle = planetGrd;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(0,229,255,0.8)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Update & draw asteroids
+  asteroids.forEach((ast, i) => {
+    ast.angle += ast.speed;
+    const x = cx + Math.cos(ast.angle) * ast.radius;
+    const y = cy + Math.sin(ast.angle) * ast.radius;
+
+    // Glow when swept
+    const angleDiff = Math.abs(((ast.angle - sweepAngle + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+    const swept = angleDiff < 0.3;
+
+    // Blip
+    ctx.beginPath();
+    ctx.arc(x, y, ast.size / 2, 0, Math.PI * 2);
+    ctx.fillStyle = ast.color;
+    ctx.globalAlpha = swept ? 1.0 : 0.5;
+    ctx.fill();
+
+    if (swept) {
+      ctx.beginPath();
+      ctx.arc(x, y, ast.size, 0, Math.PI * 2);
+      ctx.fillStyle = ast.color;
+      ctx.globalAlpha = 0.2;
+      ctx.fill();
+      ctx.shadowColor = ast.color;
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(x, y, ast.size / 2, 0, Math.PI * 2);
+      ctx.fillStyle = ast.color;
+      ctx.globalAlpha = 1;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    ctx.globalAlpha = 1;
+  });
+
+  sweepAngle += 0.015;
+
+  // Update coords display
+  const t = Date.now() * 0.001;
+  const tx = (Math.cos(t * 0.3) * 999).toFixed(2);
+  const ty = (Math.sin(t * 0.4) * 999).toFixed(2);
+  coordEl.textContent = `ORBIT: ${tx} / ${ty}`;
+
+  requestAnimationFrame(draw);
+}
+
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
