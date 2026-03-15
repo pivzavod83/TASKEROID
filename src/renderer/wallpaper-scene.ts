@@ -14,6 +14,8 @@ export interface AsteroidMesh {
   mesh: THREE.Sprite;
   flame: THREE.Sprite;
   routeLine: THREE.Line;
+  dependencyLine: THREE.Line;
+  lockBadge: THREE.Sprite;
   label: THREE.Sprite;
   labelText: string;
   baseAngle: number; // radians in XY plane
@@ -596,6 +598,70 @@ function createRouteLine(): THREE.Line {
   return line;
 }
 
+function createDependencyLine(): THREE.Line {
+  const geometry = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, 0, -0.5),
+    new THREE.Vector3(0, 0, -0.5),
+  ]);
+  const material = new THREE.LineDashedMaterial({
+    color: 0x8aa2b6,
+    transparent: true,
+    opacity: 0.34,
+    dashSize: 0.14,
+    gapSize: 0.1,
+    depthWrite: false,
+  });
+  const line = new THREE.Line(geometry, material);
+  line.computeLineDistances();
+  line.visible = false;
+  return line;
+}
+
+function createLockBadgeTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 192;
+  canvas.height = 192;
+  const ctx = canvas.getContext('2d')!;
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+
+  const glow = ctx.createRadialGradient(cx, cy, 6, cx, cy, 72);
+  glow.addColorStop(0, 'rgba(255, 213, 110, 0.28)');
+  glow.addColorStop(1, 'rgba(255, 213, 110, 0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 72, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255, 221, 140, 0.96)';
+  ctx.lineWidth = 10;
+  ctx.beginPath();
+  ctx.arc(cx, cy - 18, 24, Math.PI, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(23, 16, 8, 0.95)';
+  ctx.strokeStyle = 'rgba(255, 205, 108, 0.95)';
+  ctx.lineWidth = 8;
+  const bodyX = cx - 30;
+  const bodyY = cy - 2;
+  const bodyW = 60;
+  const bodyH = 52;
+  ctx.beginPath();
+  ctx.rect(bodyX, bodyY, bodyW, bodyH);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(255, 205, 108, 0.95)';
+  ctx.beginPath();
+  ctx.arc(cx, cy + 18, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(cx - 2.5, cy + 18, 5, 14);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+
 function createFlameTexture(seed: number, intensity: number): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 320;
@@ -774,14 +840,28 @@ export function createAsteroidMesh(
 
   const mesh = new THREE.Sprite(material);
   const flame = new THREE.Sprite(flameMaterial);
+  const dependencyLine = createDependencyLine();
+  const lockBadge = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: createLockBadgeTexture(),
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+      color: 0xffffff,
+      opacity: 0.95,
+    })
+  );
   const label = new THREE.Sprite(labelMaterial);
   const routeLine = createRouteLine();
   mesh.userData = { taskId: task.id, task };
+  lockBadge.userData = { taskId: task.id, lock: true };
   const baseScale = size * 2.35;
   mesh.scale.setScalar(baseScale);
   flame.center.set(0.2, 0.5);
   label.center.set(0.5, 0);
   label.scale.set(baseScale * 2.7, baseScale * 0.72, 1);
+  lockBadge.scale.set(baseScale * 0.5, baseScale * 0.5, 1);
+  lockBadge.visible = false;
 
   const baseAngle = (taskIndex / Math.max(1, totalTasks)) * Math.PI * 2;
   const angleOffset = (Math.random() - 0.5) * 0.4;
@@ -797,6 +877,8 @@ export function createAsteroidMesh(
     mesh,
     flame,
     routeLine,
+    dependencyLine,
+    lockBadge,
     label,
     labelText,
     baseAngle,
@@ -834,6 +916,8 @@ export function disposeAsteroidMesh(asteroid: AsteroidMesh): void {
   const material = asteroid.mesh.material as THREE.SpriteMaterial;
   const flameMaterial = asteroid.flame.material as THREE.SpriteMaterial;
   const labelMaterial = asteroid.label.material as THREE.SpriteMaterial;
+  const lockMaterial = asteroid.lockBadge.material as THREE.SpriteMaterial;
+  const dependencyMaterial = asteroid.dependencyLine.material as THREE.LineDashedMaterial;
   const routeMaterial = asteroid.routeLine.material as THREE.LineDashedMaterial;
   material.map?.dispose();
   material.dispose();
@@ -841,6 +925,10 @@ export function disposeAsteroidMesh(asteroid: AsteroidMesh): void {
   flameMaterial.dispose();
   labelMaterial.map?.dispose();
   labelMaterial.dispose();
+  lockMaterial.map?.dispose();
+  lockMaterial.dispose();
+  asteroid.dependencyLine.geometry.dispose();
+  dependencyMaterial.dispose();
   asteroid.routeLine.geometry.dispose();
   routeMaterial.dispose();
 }
@@ -903,6 +991,9 @@ export function updateAsteroidPosition(
   asteroid.label.scale.set(labelScaleBase * 2.7, labelScaleBase * 0.72, 1);
   const labelMaterial = asteroid.label.material as THREE.SpriteMaterial;
   labelMaterial.opacity = isHovered ? 1 : 0.9;
+
+  asteroid.lockBadge.position.set(x, y + asteroid.currentScale * 0.62, 0.05);
+  asteroid.lockBadge.scale.set(asteroid.currentScale * 0.52, asteroid.currentScale * 0.52, 1);
 
   const flamePulse = 1 + Math.sin(currentTime * asteroid.flameFlickerSpeed + asteroid.flamePhase) * 0.08;
   const flameDrift = Math.sin(currentTime * (asteroid.flameFlickerSpeed * 0.7) + asteroid.flamePhase) * 0.03;

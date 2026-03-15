@@ -16,6 +16,7 @@ declare const window: Window & {
 export function App(): React.ReactElement {
   const [tasks, setTasks] = useState<TaskData[]>([]);
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'mission' | 'tasks'>('mission');
 
   useEffect(() => {
     const api = window.taskeroidUI;
@@ -75,25 +76,47 @@ export function App(): React.ReactElement {
 
   return (
     <div className="app">
-      <header>
-          <div className="hud-bar">
-            <span className="hud-logo">TASKEROID</span>
-            <span className="hud-status">
-              <span className="hud-status-dot"></span>SYS ONLINE
-            </span>
-          </div>
-          <p>ORBITAL THREAT MONITOR // ASTEROID TRACKING SYSTEM</p>
-      </header>
-      <TaskForm onSubmit={handleAdd} tasks={tasks} />
-      <TaskList
-        tasks={tasks}
-        onComplete={handleComplete}
-        onDelete={handleDelete}
-        onEdit={handleEdit}
-        focusTaskId={focusTaskId}
-        onFocusTask={(taskId) => setFocusTaskId(taskId)}
-        onClearFocus={() => setFocusTaskId(null)}
-      />
+      <div className="main-tabs" role="tablist" aria-label="Main navigation tabs">
+        <button
+          type="button"
+          className={`main-tab${activeTab === 'mission' ? ' active' : ''}`}
+          onClick={() => setActiveTab('mission')}
+        >
+          Mission Input
+        </button>
+        <button
+          type="button"
+          className={`main-tab${activeTab === 'tasks' ? ' active' : ''}`}
+          onClick={() => setActiveTab('tasks')}
+        >
+          Current Tasks
+        </button>
+      </div>
+
+      {activeTab === 'mission' ? (
+        <>
+          <header>
+              <div className="hud-bar">
+                <span className="hud-logo">TASKEROID</span>
+                <span className="hud-status">
+                  <span className="hud-status-dot"></span>SYS ONLINE
+                </span>
+              </div>
+              <p>ORBITAL THREAT MONITOR // ASTEROID TRACKING SYSTEM</p>
+          </header>
+          <TaskForm onSubmit={handleAdd} tasks={tasks} />
+        </>
+      ) : (
+        <TaskList
+          tasks={tasks}
+          onComplete={handleComplete}
+          onDelete={handleDelete}
+          onEdit={handleEdit}
+          focusTaskId={focusTaskId}
+          onFocusTask={(taskId) => setFocusTaskId(taskId)}
+          onClearFocus={() => setFocusTaskId(null)}
+        />
+      )}
     </div>
   );
 }

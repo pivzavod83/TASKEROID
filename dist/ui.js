@@ -23663,7 +23663,7 @@
       ), /* @__PURE__ */ import_react.default.createElement("div", { className: "actions" }, /* @__PURE__ */ import_react.default.createElement("button", { onClick: handleSave }, "Save"), /* @__PURE__ */ import_react.default.createElement("button", { onClick: onEndEdit }, "Cancel")));
     }
     const urg = urgencyClass(task.deadline);
-    return /* @__PURE__ */ import_react.default.createElement("li", { className: `task-item${urg ? " " + urg : ""}${isDimmed ? " focus-dimmed" : ""}${isFocused ? " focus-active" : ""}${isLocked ? " task-locked" : ""}` }, /* @__PURE__ */ import_react.default.createElement("div", { className: "task-item-header" }, /* @__PURE__ */ import_react.default.createElement("span", { className: "title" }, task.title), /* @__PURE__ */ import_react.default.createElement(ImportancePips, { value: task.importance })), /* @__PURE__ */ import_react.default.createElement("span", { className: "meta" }, "DUE\xA0", /* @__PURE__ */ import_react.default.createElement("span", { className: "deadline-value" }, formatDeadline(task.deadline)), "\xA0\xA0ETA\xA0", /* @__PURE__ */ import_react.default.createElement("span", { className: "deadline-value" }, formatTimeRemaining(task.deadline))), /* @__PURE__ */ import_react.default.createElement("span", { className: "meta" }, isLocked ? "CHAIN LOCKED" : "CHAIN READY", task.repeat_type !== "none" ? `  //  REPEAT ${task.repeat_type.toUpperCase()}` : ""), /* @__PURE__ */ import_react.default.createElement("div", { className: "actions" }, /* @__PURE__ */ import_react.default.createElement("button", { onClick: onComplete, disabled: isLocked }, "\u25D9 CONFIRM"), isFocused ? /* @__PURE__ */ import_react.default.createElement("button", { onClick: onClearFocus }, "UNFOCUS") : /* @__PURE__ */ import_react.default.createElement("button", { onClick: onFocus }, "FOCUS"), /* @__PURE__ */ import_react.default.createElement("button", { onClick: onStartEdit }, "\u270E EDIT"), /* @__PURE__ */ import_react.default.createElement("button", { onClick: onDelete, className: "delete" }, "\u2715 DESTROY")));
+    return /* @__PURE__ */ import_react.default.createElement("li", { className: `task-item${urg ? " " + urg : ""}${isDimmed ? " focus-dimmed" : ""}${isFocused ? " focus-active" : ""}${isLocked ? " task-locked" : ""}` }, /* @__PURE__ */ import_react.default.createElement("div", { className: "task-item-header" }, /* @__PURE__ */ import_react.default.createElement("span", { className: "title" }, task.title), /* @__PURE__ */ import_react.default.createElement(ImportancePips, { value: task.importance })), /* @__PURE__ */ import_react.default.createElement("span", { className: "meta" }, "DUE\xA0", /* @__PURE__ */ import_react.default.createElement("span", { className: "deadline-value" }, formatDeadline(task.deadline)), "\xA0\xA0ETA\xA0", /* @__PURE__ */ import_react.default.createElement("span", { className: "deadline-value" }, formatTimeRemaining(task.deadline))), /* @__PURE__ */ import_react.default.createElement("span", { className: "meta" }, isLocked ? "CHAIN LOCKED" : "CHAIN READY", task.repeat_type !== "none" ? `  //  REPEAT ${task.repeat_type.toUpperCase()}` : ""), /* @__PURE__ */ import_react.default.createElement("div", { className: "actions" }, /* @__PURE__ */ import_react.default.createElement("button", { onClick: onComplete, disabled: isLocked }, "\u25D9 COMPLETED"), isFocused ? /* @__PURE__ */ import_react.default.createElement("button", { onClick: onClearFocus }, "UNFOCUS") : /* @__PURE__ */ import_react.default.createElement("button", { onClick: onFocus }, "FOCUS"), /* @__PURE__ */ import_react.default.createElement("button", { onClick: onStartEdit }, "\u270E EDIT"), /* @__PURE__ */ import_react.default.createElement("button", { onClick: onDelete, className: "delete" }, "\u2715 REMOVE")));
   }
 
   // src/ui/TaskList.tsx
@@ -23763,6 +23763,7 @@
   function App() {
     const [tasks, setTasks] = (0, import_react4.useState)([]);
     const [focusTaskId, setFocusTaskId] = (0, import_react4.useState)(null);
+    const [activeTab, setActiveTab] = (0, import_react4.useState)("mission");
     (0, import_react4.useEffect)(() => {
       const api = window.taskeroidUI;
       if (!api)
@@ -23798,7 +23799,23 @@
     const handleEdit = async (id, updates) => {
       await window.taskeroidUI?.updateTask(id, updates);
     };
-    return /* @__PURE__ */ import_react4.default.createElement("div", { className: "app" }, /* @__PURE__ */ import_react4.default.createElement("header", null, /* @__PURE__ */ import_react4.default.createElement("div", { className: "hud-bar" }, /* @__PURE__ */ import_react4.default.createElement("span", { className: "hud-logo" }, "TASKEROID"), /* @__PURE__ */ import_react4.default.createElement("span", { className: "hud-status" }, /* @__PURE__ */ import_react4.default.createElement("span", { className: "hud-status-dot" }), "SYS ONLINE")), /* @__PURE__ */ import_react4.default.createElement("p", null, "ORBITAL THREAT MONITOR // ASTEROID TRACKING SYSTEM")), /* @__PURE__ */ import_react4.default.createElement(TaskForm, { onSubmit: handleAdd, tasks }), /* @__PURE__ */ import_react4.default.createElement(
+    return /* @__PURE__ */ import_react4.default.createElement("div", { className: "app" }, /* @__PURE__ */ import_react4.default.createElement("div", { className: "main-tabs", role: "tablist", "aria-label": "Main navigation tabs" }, /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        type: "button",
+        className: `main-tab${activeTab === "mission" ? " active" : ""}`,
+        onClick: () => setActiveTab("mission")
+      },
+      "Mission Input"
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        type: "button",
+        className: `main-tab${activeTab === "tasks" ? " active" : ""}`,
+        onClick: () => setActiveTab("tasks")
+      },
+      "Current Tasks"
+    )), activeTab === "mission" ? /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("header", null, /* @__PURE__ */ import_react4.default.createElement("div", { className: "hud-bar" }, /* @__PURE__ */ import_react4.default.createElement("span", { className: "hud-logo" }, "TASKEROID"), /* @__PURE__ */ import_react4.default.createElement("span", { className: "hud-status" }, /* @__PURE__ */ import_react4.default.createElement("span", { className: "hud-status-dot" }), "SYS ONLINE")), /* @__PURE__ */ import_react4.default.createElement("p", null, "ORBITAL THREAT MONITOR // ASTEROID TRACKING SYSTEM")), /* @__PURE__ */ import_react4.default.createElement(TaskForm, { onSubmit: handleAdd, tasks })) : /* @__PURE__ */ import_react4.default.createElement(
       TaskList,
       {
         tasks,

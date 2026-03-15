@@ -29,6 +29,20 @@ function computeNextRepeatingDeadline(currentDeadline, repeatType) {
     }
     return next;
 }
+function createRepeatingClone(task) {
+    const nextDeadline = computeNextRepeatingDeadline(task.deadline, task.repeat_type);
+    const now = Math.floor(Date.now() / 1000);
+    return {
+        id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        title: task.title,
+        importance: task.importance,
+        deadline: nextDeadline,
+        created_at: now,
+        completed: false,
+        depends_on: task.depends_on,
+        repeat_type: task.repeat_type,
+    };
+}
 function getIcon() {
     const iconPath = path_1.default.join(__dirname, '../../assets/icon.png');
     return fs_1.default.existsSync(iconPath) ? iconPath : undefined;
@@ -87,12 +101,11 @@ electron_1.ipcMain.handle('update-task', (_event, id, updates) => {
     const before = (0, database_1.getTaskById)(id);
     const becameCompleted = before && !before.completed && updates.completed === true;
     if (before && becameCompleted && before.repeat_type !== 'none') {
-        const nextDeadline = computeNextRepeatingDeadline(before.deadline, before.repeat_type);
         (0, database_1.updateTask)(id, {
             ...updates,
-            deadline: nextDeadline,
-            completed: false,
+            completed: true,
         });
+        (0, database_1.addTask)(createRepeatingClone(before));
     }
     else {
         (0, database_1.updateTask)(id, updates);

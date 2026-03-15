@@ -42,6 +42,7 @@ let mouseClientX = 0;
 let mouseClientY = 0;
 let tooltipEl: HTMLDivElement | null = null;
 let hoveredAsteroid: AsteroidMesh | null = null;
+let hoveredLockedAsteroid: AsteroidMesh | null = null;
 let hoveredPlanet = false;
 let asteroidEditPopup: HTMLDivElement | null = null;
 let asteroidEditBackdrop: HTMLDivElement | null = null;
@@ -167,6 +168,8 @@ function removeAsteroidImmediately(taskId: string, asteroid: AsteroidMesh): void
   scene.remove(asteroid.mesh);
   scene.remove(asteroid.flame);
   scene.remove(asteroid.routeLine);
+  scene.remove(asteroid.dependencyLine);
+  scene.remove(asteroid.lockBadge);
   scene.remove(asteroid.label);
   disposeAsteroidMesh(asteroid);
   asteroids.delete(taskId);
@@ -332,6 +335,8 @@ export function playTaskCompleteAnimation(taskId: string): void {
 
   asteroid.flame.visible = false;
   asteroid.routeLine.visible = false;
+  asteroid.dependencyLine.visible = false;
+  asteroid.lockBadge.visible = false;
   asteroid.label.visible = false;
 
   triggerPlanetShieldPulse();
@@ -401,6 +406,29 @@ function showTooltip(x: number, y: number, task: Task): void {
   tooltipEl.style.opacity = '1';
 }
 
+function showLockedTooltip(x: number, y: number, task: Task): void {
+  if (!tooltipEl) tooltipEl = createTooltip();
+  const dependencyTask = task.depends_on
+    ? (latestTasks.find((candidate) => candidate.id === task.depends_on) ?? null)
+    : null;
+  const dependencyTitle = dependencyTask ? dependencyTask.title : 'DEPENDENCY TASK';
+  tooltipEl.innerHTML = `
+      <strong style="color:#ffb300">LOCKED</strong><br>
+      <span style="color:#b8d8e4">NOT YET AVAILABLE</span><br>
+      <span style="color:#3a6070">FIRST DO </span><span style="color:#00e5d4">${escapeHtml(dependencyTitle)}</span>
+  `;
+  const offset = 14;
+  let left = x + offset;
+  let top = y + offset;
+  if (left > window.innerWidth - 280) left = x - 270;
+  if (top > window.innerHeight - 96) top = y - 90;
+  if (left < 8) left = 8;
+  if (top < 8) top = 8;
+  tooltipEl.style.left = `${left}px`;
+  tooltipEl.style.top = `${top}px`;
+  tooltipEl.style.opacity = '1';
+}
+
 function hideTooltip(): void {
   if (tooltipEl) tooltipEl.style.opacity = '0';
 }
@@ -437,24 +465,6 @@ function openAsteroidEdit(task: Task): void {
       <label>Importance (1–5)</label>
       <input type="number" min="1" max="5" id="edit-importance" value="${task.importance}" />
     </div>
-    <div class="form-group">
-      <label>Depends on</label>
-      <select id="edit-depends-on">
-        <option value="">None</option>
-        ${latestTasks
-          .filter((candidate) => !candidate.completed && candidate.id !== task.id)
-          .map((candidate) => `<option value="${escapeHtml(candidate.id)}" ${task.depends_on === candidate.id ? 'selected' : ''}>${escapeHtml(candidate.title)}</option>`)
-          .join('')}
-      </select>
-    </div>
-    <div class="form-group">
-      <label>Repeat</label>
-      <select id="edit-repeat-type">
-        <option value="none" ${task.repeat_type === 'none' ? 'selected' : ''}>None</option>
-        <option value="daily" ${task.repeat_type === 'daily' ? 'selected' : ''}>Daily</option>
-        <option value="weekly" ${task.repeat_type === 'weekly' ? 'selected' : ''}>Weekly</option>
-      </select>
-    </div>
     <div class="actions">
       <button type="button" class="primary" id="edit-save">Save</button>
       <button type="button" id="edit-complete" ${task.isUnlocked === false ? 'disabled' : ''}>Complete</button>
@@ -471,11 +481,8 @@ function openAsteroidEdit(task: Task): void {
     const title = (document.getElementById('edit-title') as HTMLInputElement)?.value?.trim() || task.title;
     const date = (document.getElementById('edit-deadline') as HTMLInputElement)?.value || defaultDate;
     const importance = Math.max(1, Math.min(5, Number((document.getElementById('edit-importance') as HTMLInputElement)?.value) || 3));
-    const dependsOn = (document.getElementById('edit-depends-on') as HTMLSelectElement)?.value || null;
-    const repeatTypeRaw = (document.getElementById('edit-repeat-type') as HTMLSelectElement)?.value;
-    const repeat_type = repeatTypeRaw === 'daily' || repeatTypeRaw === 'weekly' ? repeatTypeRaw : 'none';
     const deadline = Math.floor(new Date(`${date}T23:59:59`).getTime() / 1000);
-    saveAndClose({ title, deadline, importance, depends_on: dependsOn, repeat_type });
+    saveAndClose({ title, deadline, importance });
   };
 
   const handleComplete = (): void => saveAndClose({ completed: true });
@@ -510,11 +517,16 @@ function updateHoverAndTooltip(): void {
   // Planet: only the main sphere (no children) so hover area is smaller
   const planetHits = raycaster.intersectObject(planet, false);
   const asteroidMeshes = Array.from(asteroids.values()).map((a) => a.mesh);
+  const lockBadges = Array.from(asteroids.values())
+    .filter((a) => a.lockBadge.visible)
+    .map((a) => a.lockBadge);
   const asteroidHits = raycaster.intersectObjects(asteroidMeshes);
-  const allHits = [...planetHits, ...asteroidHits].sort((a, b) => a.distance - b.distance);
+  const lockHits = raycaster.intersectObjects(lockBadges);
+  const allHits = [...planetHits, ...asteroidHits, ...lockHits].sort((a, b) => a.distance - b.distance);
 
   hoveredPlanet = false;
   hoveredAsteroid = null;
+  hoveredLockedAsteroid = null;
 
   if (allHits.length > 0) {
     const hit = allHits[0];
@@ -523,27 +535,47 @@ function updateHoverAndTooltip(): void {
     if (obj === planet) {
       hoveredPlanet = true;
     } else {
-      const data = (obj as THREE.Mesh).userData as { task?: Task };
-      if (data.task) {
-        hoveredAsteroid = asteroids.get(data.task.id) || null;
-        showTooltip(mouseClientX, mouseClientY, data.task);
+      const lockData = (obj as THREE.Mesh).userData as { taskId?: string; lock?: boolean };
+      if (lockData.lock && lockData.taskId) {
+        const lockAsteroid = asteroids.get(lockData.taskId) || null;
+        const lockTask = lockAsteroid ? ((lockAsteroid.mesh.userData as { task?: Task }).task ?? null) : null;
+        if (lockAsteroid && lockTask) {
+          hoveredLockedAsteroid = lockAsteroid;
+          showLockedTooltip(mouseClientX, mouseClientY, lockTask);
+        }
+      } else {
+        const data = (obj as THREE.Mesh).userData as { task?: Task };
+        if (data.task) {
+          const asteroid = asteroids.get(data.task.id) || null;
+          if (asteroid && data.task.isUnlocked === false) {
+            hoveredLockedAsteroid = asteroid;
+            showLockedTooltip(mouseClientX, mouseClientY, data.task);
+          } else {
+            hoveredAsteroid = asteroid;
+            showTooltip(mouseClientX, mouseClientY, data.task);
+          }
+        }
       }
     }
   }
 
-  if (!hoveredAsteroid) hideTooltip();
+  if (!hoveredAsteroid && !hoveredLockedAsteroid) hideTooltip();
 
   // Update cursor
   const canvas = renderer.domElement;
-  canvas.style.cursor = hoveredPlanet || hoveredAsteroid ? 'pointer' : 'default';
+  canvas.style.cursor = hoveredPlanet || hoveredAsteroid || hoveredLockedAsteroid ? 'pointer' : 'default';
 }
 
 function onMouseClick(): void {
   raycaster.setFromCamera(mouse, camera);
   const planetHits = raycaster.intersectObject(planet, false);
   const asteroidMeshes = Array.from(asteroids.values()).map((a) => a.mesh);
+  const lockBadges = Array.from(asteroids.values())
+    .filter((a) => a.lockBadge.visible)
+    .map((a) => a.lockBadge);
   const asteroidHits = raycaster.intersectObjects(asteroidMeshes);
-  const allHits = [...planetHits, ...asteroidHits].sort((a, b) => a.distance - b.distance);
+  const lockHits = raycaster.intersectObjects(lockBadges);
+  const allHits = [...planetHits, ...asteroidHits, ...lockHits].sort((a, b) => a.distance - b.distance);
 
   if (allHits.length === 0) return;
 
@@ -553,11 +585,86 @@ function onMouseClick(): void {
   if (obj === planet) {
     window.openTaskPanel?.();
   } else {
+    const lockData = (obj as THREE.Mesh).userData as { taskId?: string; lock?: boolean };
+    if (lockData.lock) {
+      return;
+    }
     const data = (obj as THREE.Mesh).userData as { task?: Task };
-    if (data.task) {
+    if (data.task && data.task.isUnlocked !== false) {
       openAsteroidEdit(data.task);
     }
   }
+}
+
+function updateDependencyAndLockVisuals(currentTime: number): void {
+  asteroids.forEach((asteroid) => {
+    if (completionEffects.has(asteroid.taskId)) {
+      asteroid.dependencyLine.visible = false;
+      asteroid.lockBadge.visible = false;
+      return;
+    }
+
+    const task = (asteroid.mesh.userData as { task?: Task }).task;
+    if (!task || !task.depends_on) {
+      asteroid.dependencyLine.visible = false;
+      asteroid.lockBadge.visible = false;
+      return;
+    }
+
+    const dependencyAsteroid = asteroids.get(task.depends_on);
+    if (!dependencyAsteroid) {
+      asteroid.dependencyLine.visible = false;
+      asteroid.lockBadge.visible = task.isUnlocked === false;
+      return;
+    }
+
+    asteroid.lockBadge.visible = task.isUnlocked === false;
+    asteroid.dependencyLine.visible = false;
+  });
+}
+
+function updateDependentRoutes(currentTime: number): void {
+  asteroids.forEach((asteroid) => {
+    if (completionEffects.has(asteroid.taskId)) return;
+    const task = (asteroid.mesh.userData as { task?: Task }).task;
+    if (!task?.depends_on) return;
+
+    const primary = asteroids.get(task.depends_on);
+    if (!primary || completionEffects.has(primary.taskId)) return;
+
+    const routeGeo = asteroid.routeLine.geometry as THREE.BufferGeometry;
+    const routeMat = asteroid.routeLine.material as THREE.LineDashedMaterial;
+    const routePositions = routeGeo.attributes.position as THREE.BufferAttribute;
+    const pointCount = routePositions.count;
+
+    const sx = asteroid.mesh.position.x;
+    const sy = asteroid.mesh.position.y;
+    const tx = primary.mesh.position.x;
+    const ty = primary.mesh.position.y;
+    const dx = tx - sx;
+    const dy = ty - sy;
+    const len = Math.max(0.0001, Math.sqrt(dx * dx + dy * dy));
+    const nx = -dy / len;
+    const ny = dx / len;
+    const waveAmp = Math.min(0.18, len * 0.07);
+
+    for (let i = 0; i < pointCount; i++) {
+      const t = pointCount <= 1 ? 0 : i / (pointCount - 1);
+      const bx = sx + dx * t;
+      const by = sy + dy * t;
+      const envelope = Math.sin(Math.PI * t) * 0.7;
+      const wave = Math.sin(currentTime * (0.9 * asteroid.routeSpeed) + asteroid.routePhase + t * 6.3);
+      const offset = wave * waveAmp * envelope;
+      routePositions.setXYZ(i, bx + nx * offset, by + ny * offset, -0.35);
+    }
+
+    routePositions.needsUpdate = true;
+    routeGeo.computeBoundingSphere();
+    asteroid.routeLine.computeLineDistances();
+
+    routeMat.color.setHex(0x8aa2b6);
+    routeMat.dashOffset = -(currentTime * 0.22 * asteroid.routeSpeed);
+  });
 }
 
 export function initWallpaper(canvas: HTMLCanvasElement, onCollision?: (taskId: string) => void): void {
@@ -606,6 +713,13 @@ export function initWallpaper(canvas: HTMLCanvasElement, onCollision?: (taskId: 
       if (completionEffects.has(taskId)) return;
       const task = (asteroid.mesh.userData as { task?: Task }).task;
       if (!task) return;
+      if (task.depends_on) {
+        const primary = asteroids.get(task.depends_on);
+        if (primary) {
+          const alignedTarget = primary.baseAngle + primary.angleOffset - asteroid.angleOffset;
+          setAsteroidTargetAngle(asteroid, alignedTarget);
+        }
+      }
       if (hasCollided(task, now)) {
         removeAsteroidImmediately(taskId, asteroid);
         onCollision?.(taskId);
@@ -621,11 +735,15 @@ export function initWallpaper(canvas: HTMLCanvasElement, onCollision?: (taskId: 
       const meshMat = asteroid.mesh.material as THREE.SpriteMaterial;
       const flameMat = asteroid.flame.material as THREE.SpriteMaterial;
       const routeMat = asteroid.routeLine.material as THREE.LineDashedMaterial;
+      const dependencyMat = asteroid.dependencyLine.material as THREE.LineDashedMaterial;
+      const lockMat = asteroid.lockBadge.material as THREE.SpriteMaterial;
       const labelMat = asteroid.label.material as THREE.SpriteMaterial;
 
       meshMat.opacity = isDimmed ? 0.2 : 1;
       flameMat.opacity = Math.min(1, flameMat.opacity * (isDimmed ? 0.12 : (isFocused ? 1.1 : 1)));
       routeMat.opacity = Math.min(1, routeMat.opacity * (isDimmed ? 0.08 : (isFocused ? 1.15 : 1)));
+      dependencyMat.opacity = isDimmed ? 0.07 : 0.34;
+      lockMat.opacity = isDimmed ? 0.35 : 0.95;
       labelMat.opacity = Math.min(1, labelMat.opacity * (isDimmed ? 0.28 : (isFocused ? 1.05 : 1)));
 
       if (isFocused) {
@@ -633,6 +751,9 @@ export function initWallpaper(canvas: HTMLCanvasElement, onCollision?: (taskId: 
         asteroid.flame.scale.multiplyScalar(1.06);
       }
     });
+
+    updateDependentRoutes(currentTime / 1000);
+    updateDependencyAndLockVisuals(currentTime / 1000);
 
     updateHoverAndTooltip();
     renderer.render(scene, camera);
@@ -657,7 +778,6 @@ export function setTasks(tasks: Task[]): void {
   latestTasks = tasks;
   const now = Date.now() / 1000;
   const visibleTasks = tasks
-    .filter((t) => t.isUnlocked !== false)
     .filter((t) => !hasCollided(t, now));
   const ids = new Set(visibleTasks.map((t) => t.id));
 
@@ -693,6 +813,8 @@ export function setTasks(tasks: Task[]): void {
       scene.add(asteroid.mesh);
       scene.add(asteroid.flame);
       scene.add(asteroid.routeLine);
+      scene.add(asteroid.dependencyLine);
+      scene.add(asteroid.lockBadge);
       scene.add(asteroid.label);
       asteroids.set(task.id, asteroid);
     }

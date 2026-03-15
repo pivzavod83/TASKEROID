@@ -36,6 +36,37 @@ body {
   margin: 0 auto;
 }
 
+.main-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.main-tab {
+  flex: 1;
+  padding: 8px 10px;
+  background: rgba(0, 18, 30, 0.7);
+  border: 1px solid var(--border);
+  color: var(--text-lo);
+  font-family: inherit;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: background 0.14s, border-color 0.14s, color 0.14s;
+}
+
+.main-tab:hover {
+  border-color: var(--border-hi);
+  color: var(--text-hi);
+}
+
+.main-tab.active {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  background: rgba(0, 229, 212, 0.1);
+}
+
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.3; }

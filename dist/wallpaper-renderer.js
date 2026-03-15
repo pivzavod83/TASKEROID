@@ -20863,6 +20863,63 @@
     line.computeLineDistances();
     return line;
   }
+  function createDependencyLine() {
+    const geometry = new BufferGeometry().setFromPoints([
+      new Vector3(0, 0, -0.5),
+      new Vector3(0, 0, -0.5)
+    ]);
+    const material = new LineDashedMaterial({
+      color: 9085622,
+      transparent: true,
+      opacity: 0.34,
+      dashSize: 0.14,
+      gapSize: 0.1,
+      depthWrite: false
+    });
+    const line = new Line(geometry, material);
+    line.computeLineDistances();
+    line.visible = false;
+    return line;
+  }
+  function createLockBadgeTexture() {
+    const canvas2 = document.createElement("canvas");
+    canvas2.width = 192;
+    canvas2.height = 192;
+    const ctx = canvas2.getContext("2d");
+    const cx = canvas2.width / 2;
+    const cy = canvas2.height / 2;
+    const glow = ctx.createRadialGradient(cx, cy, 6, cx, cy, 72);
+    glow.addColorStop(0, "rgba(255, 213, 110, 0.28)");
+    glow.addColorStop(1, "rgba(255, 213, 110, 0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 72, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255, 221, 140, 0.96)";
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.arc(cx, cy - 18, 24, Math.PI, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(23, 16, 8, 0.95)";
+    ctx.strokeStyle = "rgba(255, 205, 108, 0.95)";
+    ctx.lineWidth = 8;
+    const bodyX = cx - 30;
+    const bodyY = cy - 2;
+    const bodyW = 60;
+    const bodyH = 52;
+    ctx.beginPath();
+    ctx.rect(bodyX, bodyY, bodyW, bodyH);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255, 205, 108, 0.95)";
+    ctx.beginPath();
+    ctx.arc(cx, cy + 18, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(cx - 2.5, cy + 18, 5, 14);
+    const tex = new CanvasTexture(canvas2);
+    tex.needsUpdate = true;
+    return tex;
+  }
   function createFlameTexture(seed, intensity) {
     const canvas2 = document.createElement("canvas");
     canvas2.width = 320;
@@ -21012,14 +21069,28 @@
     });
     const mesh = new Sprite(material);
     const flame = new Sprite(flameMaterial);
+    const dependencyLine = createDependencyLine();
+    const lockBadge = new Sprite(
+      new SpriteMaterial({
+        map: createLockBadgeTexture(),
+        transparent: true,
+        depthWrite: false,
+        depthTest: false,
+        color: 16777215,
+        opacity: 0.95
+      })
+    );
     const label = new Sprite(labelMaterial);
     const routeLine = createRouteLine();
     mesh.userData = { taskId: task.id, task };
+    lockBadge.userData = { taskId: task.id, lock: true };
     const baseScale = size * 2.35;
     mesh.scale.setScalar(baseScale);
     flame.center.set(0.2, 0.5);
     label.center.set(0.5, 0);
     label.scale.set(baseScale * 2.7, baseScale * 0.72, 1);
+    lockBadge.scale.set(baseScale * 0.5, baseScale * 0.5, 1);
+    lockBadge.visible = false;
     const baseAngle = taskIndex / Math.max(1, totalTasks) * Math.PI * 2;
     const angleOffset = (Math.random() - 0.5) * 0.4;
     const flamePhase = Math.random() * Math.PI * 2;
@@ -21033,6 +21104,8 @@
       mesh,
       flame,
       routeLine,
+      dependencyLine,
+      lockBadge,
       label,
       labelText,
       baseAngle,
@@ -21063,6 +21136,8 @@
     const material = asteroid.mesh.material;
     const flameMaterial = asteroid.flame.material;
     const labelMaterial = asteroid.label.material;
+    const lockMaterial = asteroid.lockBadge.material;
+    const dependencyMaterial = asteroid.dependencyLine.material;
     const routeMaterial = asteroid.routeLine.material;
     material.map?.dispose();
     material.dispose();
@@ -21070,6 +21145,10 @@
     flameMaterial.dispose();
     labelMaterial.map?.dispose();
     labelMaterial.dispose();
+    lockMaterial.map?.dispose();
+    lockMaterial.dispose();
+    asteroid.dependencyLine.geometry.dispose();
+    dependencyMaterial.dispose();
     asteroid.routeLine.geometry.dispose();
     routeMaterial.dispose();
   }
@@ -21114,6 +21193,8 @@
     asteroid.label.scale.set(labelScaleBase * 2.7, labelScaleBase * 0.72, 1);
     const labelMaterial = asteroid.label.material;
     labelMaterial.opacity = isHovered ? 1 : 0.9;
+    asteroid.lockBadge.position.set(x, y + asteroid.currentScale * 0.62, 0.05);
+    asteroid.lockBadge.scale.set(asteroid.currentScale * 0.52, asteroid.currentScale * 0.52, 1);
     const flamePulse = 1 + Math.sin(currentTime * asteroid.flameFlickerSpeed + asteroid.flamePhase) * 0.08;
     const flameDrift = Math.sin(currentTime * (asteroid.flameFlickerSpeed * 0.7) + asteroid.flamePhase) * 0.03;
     const wiggle = Math.sin(currentTime * (asteroid.flameFlickerSpeed * 1.9) + asteroid.flamePhase * 1.4) * asteroid.currentScale * 0.12;
@@ -21184,6 +21265,7 @@
   var mouseClientY = 0;
   var tooltipEl = null;
   var hoveredAsteroid = null;
+  var hoveredLockedAsteroid = null;
   var hoveredPlanet = false;
   var asteroidEditPopup = null;
   var asteroidEditBackdrop = null;
@@ -21273,6 +21355,8 @@
     scene.remove(asteroid.mesh);
     scene.remove(asteroid.flame);
     scene.remove(asteroid.routeLine);
+    scene.remove(asteroid.dependencyLine);
+    scene.remove(asteroid.lockBadge);
     scene.remove(asteroid.label);
     disposeAsteroidMesh(asteroid);
     asteroids.delete(taskId);
@@ -21420,6 +21504,8 @@
     }
     asteroid.flame.visible = false;
     asteroid.routeLine.visible = false;
+    asteroid.dependencyLine.visible = false;
+    asteroid.lockBadge.visible = false;
     asteroid.label.visible = false;
     triggerPlanetShieldPulse();
     const effect = createCompletionEffect(taskId, asteroid);
@@ -21485,6 +21571,31 @@
     tooltipEl.style.top = `${top}px`;
     tooltipEl.style.opacity = "1";
   }
+  function showLockedTooltip(x, y, task) {
+    if (!tooltipEl)
+      tooltipEl = createTooltip();
+    const dependencyTask = task.depends_on ? latestTasks.find((candidate) => candidate.id === task.depends_on) ?? null : null;
+    const dependencyTitle = dependencyTask ? dependencyTask.title : "DEPENDENCY TASK";
+    tooltipEl.innerHTML = `
+      <strong style="color:#ffb300">LOCKED</strong><br>
+      <span style="color:#b8d8e4">NOT YET AVAILABLE</span><br>
+      <span style="color:#3a6070">FIRST DO </span><span style="color:#00e5d4">${escapeHtml(dependencyTitle)}</span>
+  `;
+    const offset = 14;
+    let left = x + offset;
+    let top = y + offset;
+    if (left > window.innerWidth - 280)
+      left = x - 270;
+    if (top > window.innerHeight - 96)
+      top = y - 90;
+    if (left < 8)
+      left = 8;
+    if (top < 8)
+      top = 8;
+    tooltipEl.style.left = `${left}px`;
+    tooltipEl.style.top = `${top}px`;
+    tooltipEl.style.opacity = "1";
+  }
   function hideTooltip() {
     if (tooltipEl)
       tooltipEl.style.opacity = "0";
@@ -21520,21 +21631,6 @@
       <label>Importance (1\u20135)</label>
       <input type="number" min="1" max="5" id="edit-importance" value="${task.importance}" />
     </div>
-    <div class="form-group">
-      <label>Depends on</label>
-      <select id="edit-depends-on">
-        <option value="">None</option>
-        ${latestTasks.filter((candidate) => !candidate.completed && candidate.id !== task.id).map((candidate) => `<option value="${escapeHtml(candidate.id)}" ${task.depends_on === candidate.id ? "selected" : ""}>${escapeHtml(candidate.title)}</option>`).join("")}
-      </select>
-    </div>
-    <div class="form-group">
-      <label>Repeat</label>
-      <select id="edit-repeat-type">
-        <option value="none" ${task.repeat_type === "none" ? "selected" : ""}>None</option>
-        <option value="daily" ${task.repeat_type === "daily" ? "selected" : ""}>Daily</option>
-        <option value="weekly" ${task.repeat_type === "weekly" ? "selected" : ""}>Weekly</option>
-      </select>
-    </div>
     <div class="actions">
       <button type="button" class="primary" id="edit-save">Save</button>
       <button type="button" id="edit-complete" ${task.isUnlocked === false ? "disabled" : ""}>Complete</button>
@@ -21549,11 +21645,8 @@
       const title = document.getElementById("edit-title")?.value?.trim() || task.title;
       const date = document.getElementById("edit-deadline")?.value || defaultDate;
       const importance = Math.max(1, Math.min(5, Number(document.getElementById("edit-importance")?.value) || 3));
-      const dependsOn = document.getElementById("edit-depends-on")?.value || null;
-      const repeatTypeRaw = document.getElementById("edit-repeat-type")?.value;
-      const repeat_type = repeatTypeRaw === "daily" || repeatTypeRaw === "weekly" ? repeatTypeRaw : "none";
       const deadline = Math.floor((/* @__PURE__ */ new Date(`${date}T23:59:59`)).getTime() / 1e3);
-      saveAndClose({ title, deadline, importance, depends_on: dependsOn, repeat_type });
+      saveAndClose({ title, deadline, importance });
     };
     const handleComplete = () => saveAndClose({ completed: true });
     const handleDelete = () => {
@@ -21582,34 +21675,55 @@
     raycaster.setFromCamera(mouse, camera);
     const planetHits = raycaster.intersectObject(planet, false);
     const asteroidMeshes = Array.from(asteroids.values()).map((a) => a.mesh);
+    const lockBadges = Array.from(asteroids.values()).filter((a) => a.lockBadge.visible).map((a) => a.lockBadge);
     const asteroidHits = raycaster.intersectObjects(asteroidMeshes);
-    const allHits = [...planetHits, ...asteroidHits].sort((a, b) => a.distance - b.distance);
+    const lockHits = raycaster.intersectObjects(lockBadges);
+    const allHits = [...planetHits, ...asteroidHits, ...lockHits].sort((a, b) => a.distance - b.distance);
     hoveredPlanet = false;
     hoveredAsteroid = null;
+    hoveredLockedAsteroid = null;
     if (allHits.length > 0) {
       const hit = allHits[0];
       const obj = hit.object;
       if (obj === planet) {
         hoveredPlanet = true;
       } else {
-        const data = obj.userData;
-        if (data.task) {
-          hoveredAsteroid = asteroids.get(data.task.id) || null;
-          showTooltip(mouseClientX, mouseClientY, data.task);
+        const lockData = obj.userData;
+        if (lockData.lock && lockData.taskId) {
+          const lockAsteroid = asteroids.get(lockData.taskId) || null;
+          const lockTask = lockAsteroid ? lockAsteroid.mesh.userData.task ?? null : null;
+          if (lockAsteroid && lockTask) {
+            hoveredLockedAsteroid = lockAsteroid;
+            showLockedTooltip(mouseClientX, mouseClientY, lockTask);
+          }
+        } else {
+          const data = obj.userData;
+          if (data.task) {
+            const asteroid = asteroids.get(data.task.id) || null;
+            if (asteroid && data.task.isUnlocked === false) {
+              hoveredLockedAsteroid = asteroid;
+              showLockedTooltip(mouseClientX, mouseClientY, data.task);
+            } else {
+              hoveredAsteroid = asteroid;
+              showTooltip(mouseClientX, mouseClientY, data.task);
+            }
+          }
         }
       }
     }
-    if (!hoveredAsteroid)
+    if (!hoveredAsteroid && !hoveredLockedAsteroid)
       hideTooltip();
     const canvas2 = renderer.domElement;
-    canvas2.style.cursor = hoveredPlanet || hoveredAsteroid ? "pointer" : "default";
+    canvas2.style.cursor = hoveredPlanet || hoveredAsteroid || hoveredLockedAsteroid ? "pointer" : "default";
   }
   function onMouseClick() {
     raycaster.setFromCamera(mouse, camera);
     const planetHits = raycaster.intersectObject(planet, false);
     const asteroidMeshes = Array.from(asteroids.values()).map((a) => a.mesh);
+    const lockBadges = Array.from(asteroids.values()).filter((a) => a.lockBadge.visible).map((a) => a.lockBadge);
     const asteroidHits = raycaster.intersectObjects(asteroidMeshes);
-    const allHits = [...planetHits, ...asteroidHits].sort((a, b) => a.distance - b.distance);
+    const lockHits = raycaster.intersectObjects(lockBadges);
+    const allHits = [...planetHits, ...asteroidHits, ...lockHits].sort((a, b) => a.distance - b.distance);
     if (allHits.length === 0)
       return;
     const hit = allHits[0];
@@ -21617,11 +21731,78 @@
     if (obj === planet) {
       window.openTaskPanel?.();
     } else {
+      const lockData = obj.userData;
+      if (lockData.lock) {
+        return;
+      }
       const data = obj.userData;
-      if (data.task) {
+      if (data.task && data.task.isUnlocked !== false) {
         openAsteroidEdit(data.task);
       }
     }
+  }
+  function updateDependencyAndLockVisuals(currentTime) {
+    asteroids.forEach((asteroid) => {
+      if (completionEffects.has(asteroid.taskId)) {
+        asteroid.dependencyLine.visible = false;
+        asteroid.lockBadge.visible = false;
+        return;
+      }
+      const task = asteroid.mesh.userData.task;
+      if (!task || !task.depends_on) {
+        asteroid.dependencyLine.visible = false;
+        asteroid.lockBadge.visible = false;
+        return;
+      }
+      const dependencyAsteroid = asteroids.get(task.depends_on);
+      if (!dependencyAsteroid) {
+        asteroid.dependencyLine.visible = false;
+        asteroid.lockBadge.visible = task.isUnlocked === false;
+        return;
+      }
+      asteroid.lockBadge.visible = task.isUnlocked === false;
+      asteroid.dependencyLine.visible = false;
+    });
+  }
+  function updateDependentRoutes(currentTime) {
+    asteroids.forEach((asteroid) => {
+      if (completionEffects.has(asteroid.taskId))
+        return;
+      const task = asteroid.mesh.userData.task;
+      if (!task?.depends_on)
+        return;
+      const primary = asteroids.get(task.depends_on);
+      if (!primary || completionEffects.has(primary.taskId))
+        return;
+      const routeGeo = asteroid.routeLine.geometry;
+      const routeMat = asteroid.routeLine.material;
+      const routePositions = routeGeo.attributes.position;
+      const pointCount = routePositions.count;
+      const sx = asteroid.mesh.position.x;
+      const sy = asteroid.mesh.position.y;
+      const tx = primary.mesh.position.x;
+      const ty = primary.mesh.position.y;
+      const dx = tx - sx;
+      const dy = ty - sy;
+      const len = Math.max(1e-4, Math.sqrt(dx * dx + dy * dy));
+      const nx = -dy / len;
+      const ny = dx / len;
+      const waveAmp = Math.min(0.18, len * 0.07);
+      for (let i = 0; i < pointCount; i++) {
+        const t = pointCount <= 1 ? 0 : i / (pointCount - 1);
+        const bx = sx + dx * t;
+        const by = sy + dy * t;
+        const envelope = Math.sin(Math.PI * t) * 0.7;
+        const wave = Math.sin(currentTime * (0.9 * asteroid.routeSpeed) + asteroid.routePhase + t * 6.3);
+        const offset = wave * waveAmp * envelope;
+        routePositions.setXYZ(i, bx + nx * offset, by + ny * offset, -0.35);
+      }
+      routePositions.needsUpdate = true;
+      routeGeo.computeBoundingSphere();
+      asteroid.routeLine.computeLineDistances();
+      routeMat.color.setHex(9085622);
+      routeMat.dashOffset = -(currentTime * 0.22 * asteroid.routeSpeed);
+    });
   }
   function initWallpaper(canvas2, onCollision) {
     scene = new Scene();
@@ -21662,6 +21843,13 @@
         const task = asteroid.mesh.userData.task;
         if (!task)
           return;
+        if (task.depends_on) {
+          const primary = asteroids.get(task.depends_on);
+          if (primary) {
+            const alignedTarget = primary.baseAngle + primary.angleOffset - asteroid.angleOffset;
+            setAsteroidTargetAngle(asteroid, alignedTarget);
+          }
+        }
         if (hasCollided(task, now)) {
           removeAsteroidImmediately(taskId, asteroid);
           onCollision?.(taskId);
@@ -21675,16 +21863,22 @@
         const meshMat = asteroid.mesh.material;
         const flameMat = asteroid.flame.material;
         const routeMat = asteroid.routeLine.material;
+        const dependencyMat = asteroid.dependencyLine.material;
+        const lockMat = asteroid.lockBadge.material;
         const labelMat = asteroid.label.material;
         meshMat.opacity = isDimmed ? 0.2 : 1;
         flameMat.opacity = Math.min(1, flameMat.opacity * (isDimmed ? 0.12 : isFocused ? 1.1 : 1));
         routeMat.opacity = Math.min(1, routeMat.opacity * (isDimmed ? 0.08 : isFocused ? 1.15 : 1));
+        dependencyMat.opacity = isDimmed ? 0.07 : 0.34;
+        lockMat.opacity = isDimmed ? 0.35 : 0.95;
         labelMat.opacity = Math.min(1, labelMat.opacity * (isDimmed ? 0.28 : isFocused ? 1.05 : 1));
         if (isFocused) {
           asteroid.mesh.scale.multiplyScalar(1.08);
           asteroid.flame.scale.multiplyScalar(1.06);
         }
       });
+      updateDependentRoutes(currentTime / 1e3);
+      updateDependencyAndLockVisuals(currentTime / 1e3);
       updateHoverAndTooltip();
       renderer.render(scene, camera);
       animationId = requestAnimationFrame(animate);
@@ -21704,7 +21898,7 @@
   function setTasks(tasks) {
     latestTasks = tasks;
     const now = Date.now() / 1e3;
-    const visibleTasks = tasks.filter((t) => t.isUnlocked !== false).filter((t) => !hasCollided(t, now));
+    const visibleTasks = tasks.filter((t) => !hasCollided(t, now));
     const ids = new Set(visibleTasks.map((t) => t.id));
     asteroids.forEach((asteroid, taskId) => {
       if (!ids.has(taskId)) {
@@ -21736,6 +21930,8 @@
         scene.add(asteroid.mesh);
         scene.add(asteroid.flame);
         scene.add(asteroid.routeLine);
+        scene.add(asteroid.dependencyLine);
+        scene.add(asteroid.lockBadge);
         scene.add(asteroid.label);
         asteroids.set(task.id, asteroid);
       }

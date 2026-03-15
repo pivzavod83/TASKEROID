@@ -157,14 +157,14 @@ export function TaskItem({
         {task.repeat_type !== 'none' ? `  //  REPEAT ${task.repeat_type.toUpperCase()}` : ''}
       </span>
       <div className="actions">
-        <button onClick={onComplete} disabled={isLocked}>&#9689; CONFIRM</button>
+        <button onClick={onComplete} disabled={isLocked}>&#9689; COMPLETED</button>
         {isFocused ? (
           <button onClick={onClearFocus}>UNFOCUS</button>
         ) : (
           <button onClick={onFocus}>FOCUS</button>
         )}
         <button onClick={onStartEdit}>&#9998; EDIT</button>
-        <button onClick={onDelete} className="delete">&#10005; DESTROY</button>
+        <button onClick={onDelete} className="delete">&#10005; REMOVE</button>
       </div>
     </li>
   );
