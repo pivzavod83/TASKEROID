@@ -1,507 +1,478 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Taskeroid — Organise your tasks to reach the stars</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
-    <style>
-      /*
-        Taskeroid landing page
-        - Dark space theme
-        - Starfield + shooting stars every ~10s
-        - Solar-system planets
-        - Intro animation: elements rise from bottom/center into place
-      */
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Taskeroid — Organise Your Universe</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
 
-      :root {
-        --bg0: #05060a;
-        --bg1: #080a12;
-        --text: rgba(255, 255, 255, 0.96);
-        --muted: rgba(255, 255, 255, 0.92);
-        --blue: #3aa3ff;
-        --blue2: #2b67ff;
-        --stroke: rgba(150, 185, 255, 0.18);
-      }
+  :root {
+    --bone: #F5F0E8;
+    --gold-bright: #F0C060;
+    --deep-space: #020408;
+  }
 
-      * {
-        box-sizing: border-box;
-      }
+  html, body {
+    width: 100%; height: 100%;
+    overflow-x: hidden;
+    background: var(--deep-space);
+    font-family: 'Archivo Black', sans-serif;
+    color: var(--bone);
+  }
 
-      html,
-      body {
-        height: 100%;
-      }
+  #starCanvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 0;
+    pointer-events: none;
+  }
 
-      body {
-        margin: 0;
-        /* night-sky look */
-        background:
-          radial-gradient(1200px 700px at 50% -10%, rgba(92, 120, 255, 0.18) 0%, rgba(0, 0, 0, 0) 55%),
-          radial-gradient(900px 600px at 15% 20%, rgba(80, 190, 255, 0.10) 0%, rgba(0, 0, 0, 0) 60%),
-          radial-gradient(900px 600px at 80% 35%, rgba(180, 90, 255, 0.08) 0%, rgba(0, 0, 0, 0) 62%),
-          linear-gradient(180deg, #050613 0%, #02030b 60%, #010108 100%);
-        color: var(--text);
-        font-family: "Cormorant Garamond", "Garamond", "Times New Roman", serif;
-        overflow: hidden;
-      }
+  /* ===== PLANETS ===== */
+  .planet-wrap {
+    position: fixed;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0;
+    animation: planetFadeIn 2s ease forwards;
+  }
+  @keyframes planetFadeIn { to { opacity: 1; } }
 
-      /* Background layers */
-      .space {
-        position: relative;
-        height: 100vh;
-        width: 100vw;
-        overflow: hidden;
-        isolation: isolate;
-      }
+  .planet-wrap canvas {
+    display: block;
+    mix-blend-mode: screen;
+  }
 
-      /* Star DOM layer (lots of stars, guaranteed visible) */
-      .star {
-        position: absolute;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 1);
-        box-shadow:
-          0 0 10px rgba(210, 235, 255, 0.55),
-          0 0 26px rgba(160, 210, 255, 0.22);
-        opacity: var(--a);
-        width: var(--s);
-        height: var(--s);
-      }
+  @keyframes rotatePlanet        { from { transform: rotate(0deg); }   to { transform: rotate(360deg); } }
+  @keyframes rotatePlanetReverse { from { transform: rotate(0deg); }   to { transform: rotate(-360deg); } }
 
-      .star.twinkle {
-        animation: twinkle var(--t) ease-in-out infinite alternate;
-      }
+  .planet-spin        { animation: rotatePlanet        30s linear infinite; }
+  .planet-spin-slow   { animation: rotatePlanet        50s linear infinite; }
+  .planet-spin-rev    { animation: rotatePlanetReverse 40s linear infinite; }
+  .planet-spin-vslow  { animation: rotatePlanet        70s linear infinite; }
+  .planet-spin-med    { animation: rotatePlanet        38s linear infinite; }
 
-      @keyframes twinkle {
-        0% {
-          opacity: calc(var(--a) * 0.55);
-          transform: scale(0.92);
-        }
-        100% {
-          opacity: var(--a);
-          transform: scale(1);
-        }
-      }
+  /* Positions */
+  .pos-mars    { bottom: -60px; left: -60px;  animation-delay: 1.5s; }
+  .pos-jupiter { top: -100px;   right: -80px; animation-delay: 1.8s; }
+  .pos-saturn  { top: 50%;      right: 2%;    animation-delay: 2.1s; }
+  .pos-blue    { top: 28%;      left: 2%;     animation-delay: 2.4s; }
+  .pos-pluto   { bottom: 18%;   right: 10%;   animation-delay: 2.7s; }
+  .pos-moon    { top: 12%;      left: 20%;    animation-delay: 3.0s; }
+  .pos-teal    { bottom: 5%;    right: 30%;   animation-delay: 3.3s; }
 
-      /* vignette and subtle noise */
-      .vignette {
-        position: absolute;
-        inset: 0;
-        z-index: 3;
-        pointer-events: none;
-        background:
-          radial-gradient(1100px 760px at 50% 25%, rgba(24, 32, 75, 0.0) 0%, rgba(0, 0, 0, 0.62) 100%),
-          linear-gradient(180deg, rgba(0, 0, 0, 0.18) 0%, rgba(0, 0, 0, 0.62) 100%);
-      }
+  /* ===== MAIN CONTENT ===== */
+  #mainContent {
+    position: relative;
+    z-index: 10;
+    min-height: 100vh;
+  }
 
-      .noise {
-        position: absolute;
-        inset: 0;
-        z-index: 4;
-        pointer-events: none;
-        opacity: 0.06;
-        mix-blend-mode: overlay;
-        background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/></filter><rect width="160" height="160" filter="url(%23n)" opacity="0.55"/></svg>');
-      }
+  .hero {
+    position: relative;
+    width: 100%;
+    min-height: 100vh;
+  }
 
-      /* Solar system bodies */
-      .planet {
-        position: absolute;
-        border-radius: 999px;
-        z-index: 2;
-        filter: drop-shadow(0 28px 70px rgba(0, 0, 0, 0.55)) saturate(1.1);
-        animation: drift var(--dur) ease-in-out infinite alternate;
-        opacity: 0.98;
-      }
-
-      .planet::after {
-        content: "";
-        position: absolute;
-        inset: -14px;
-        border-radius: 999px;
-        background: radial-gradient(circle at 30% 35%, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 58%);
-      }
-
-      @keyframes drift {
-        0% {
-          transform: translate3d(0, 0, 0);
-        }
-        100% {
-          transform: translate3d(var(--dx), var(--dy), 0);
-        }
-      }
-
-      /* Sun */
-      .planet.sun {
-        width: 220px;
-        height: 220px;
-        left: -95px;
-        top: 10vh;
-        --dur: 20s;
-        --dx: 36px;
-        --dy: 16px;
-        background: radial-gradient(circle at 60% 55%, #ffe07a 0%, #ffb84a 28%, #ff6a2a 56%, #1b0b08 100%);
-        box-shadow: 0 0 90px rgba(255, 170, 60, 0.22);
-      }
-
-      /* Mercury */
-      .planet.mercury {
-        width: 120px;
-        height: 120px;
-        left: 10vw;
-        top: 14vh;
-        --dur: 26s;
-        --dx: 26px;
-        --dy: -12px;
-        background: radial-gradient(circle at 60% 55%, #f6f0e8 0%, #b8a99a 30%, #6f625a 62%, #141216 100%);
-        opacity: 0.88;
-      }
-
-      /* Earth */
-      .planet.earth {
-        width: 190px;
-        height: 190px;
-        right: 6vw;
-        top: 9vh;
-        --dur: 28s;
-        --dx: -28px;
-        --dy: 18px;
-        background: radial-gradient(circle at 60% 55%, #7cf3ff 0%, #2b8cff 25%, #113e96 55%, #050c20 100%);
-      }
-
-      .planet.earth::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        border-radius: 999px;
-        background: radial-gradient(circle at 40% 40%, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 55%);
-        opacity: 1;
-        filter: blur(0.2px);
-      }
-
-      /* Mars */
-      .planet.mars {
-        width: 140px;
-        height: 140px;
-        right: -35px;
-        bottom: 22vh;
-        --dur: 30s;
-        --dx: -28px;
-        --dy: -18px;
-        background: radial-gradient(circle at 60% 55%, #ffd0b9 0%, #ff7a45 28%, #b4371a 56%, #1a0706 100%);
-        opacity: 0.86;
-      }
-
-      /* Jupiter */
-      .planet.jupiter {
-        width: 320px;
-        height: 320px;
-        right: -120px;
-        bottom: -140px;
-        --dur: 32s;
-        --dx: -55px;
-        --dy: -26px;
-        background: radial-gradient(circle at 60% 55%, #fff0d8 0%, #e1b07a 26%, #9a6a40 55%, #27170f 100%);
-        opacity: 0.62;
-      }
-
-      .planet.jupiter::before {
-        content: "";
-        position: absolute;
-        inset: 18px;
-        border-radius: 999px;
-        background: radial-gradient(circle at 55% 60%, rgba(0, 0, 0, 0.16) 0%, rgba(0, 0, 0, 0) 55%);
-        mix-blend-mode: multiply;
-        opacity: 0.5;
-      }
-
-      /* Header font */
-      .title {
-        margin: 0;
-        font-size: clamp(160px, 20vw, 256px);
-        letter-spacing: 0.01em;
-        line-height: 0.98;
-        text-shadow:
-          0 2px 0 rgba(255, 255, 255, 0.08),
-          0 14px 32px rgba(0, 0, 0, 0.62),
-          0 0 26px rgba(255, 255, 255, 0.16);
-        color: #fff;
-        font-family: "Archivo Black", system-ui, -apple-system, "Segoe UI", sans-serif;
-        letter-spacing: 0.02em;
-      }
-
-      .title span {
-        display: inline-block;
-        color: #ffffff;
-        text-shadow:
-          0 1px 0 rgba(255, 255, 255, 0.14),
-          0 14px 0 rgba(0, 0, 0, 0.35),
-          0 26px 42px rgba(0, 0, 0, 0.65);
-      }
-
-      .tagline {
-        margin: 18px 0 0;
-        font-size: clamp(26px, 3.1vw, 42px);
-        font-family: "Archivo Black", system-ui, -apple-system, "Segoe UI", sans-serif;
-        color: #ffffff;
-        letter-spacing: 0.01em;
-      }
-
-      /* Content */
-      .content {
-            display: flex
-;
-    justify-content: center;
+  .hero-block {
+    position: absolute;
+    top: 25%;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    width: 100vw;
-    height: 100vh;
-      }
+    width: max-content;
+    max-width: 90vw;
+  }
 
-      .titleBlockBox {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-      }
+  .animate-in {
+    opacity: 0;
+    transform: translateY(40px);
+    animation: riseIn 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  @keyframes riseIn { to { opacity: 1; transform: translateY(0); } }
 
-      .titleBlock {
-        position: relative;
-        margin-top: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 350px;
-      }
+  h1.title {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: clamp(72px, 12vw, 160px);
+    font-weight: 900;
+    letter-spacing: 0.05em;
+    color: #ffffff;
+    line-height: 1;
+    text-shadow: none;
+    text-align: center;
+  }
 
-      .ctaRow {
-        /* keep buttons near the centered block */
-        position: relative;
-        top: 0;
-        margin-top: 30px;
-        display: flex;
-        justify-content: center;
-        gap: 14px;
-        flex-wrap: wrap;
-      }
+  .subtitle-wrap {
+    position: relative;
+    margin-top: 20px;
+    animation-delay: 0.55s;
+    align-self: flex-start;
+    padding-left: 4px;
+  }
 
-      .btn {
-        appearance: none;
-        border: 1px solid rgba(0, 0, 0, 0.10);
-        /* bone / mild white */
-        background: linear-gradient(180deg, rgba(248, 243, 232, 0.92), rgba(238, 231, 216, 0.82));
-        color: rgba(14, 18, 28, 0.92);
-        font-family: "Archivo Black", system-ui, -apple-system, "Segoe UI", sans-serif;
-        border-radius: 18px;
-        padding: 14px 18px;
-        font-size: 18px;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        min-width: 230px;
-        justify-content: center;
-        text-decoration: none;
-        box-shadow: 0 22px 56px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.40);
-        transition:
-          transform 300ms cubic-bezier(0.2, 0.9, 0.2, 1),
-          background 260ms ease,
-          box-shadow 260ms ease,
-          border-color 260ms ease,
-          filter 260ms ease;
-        will-change: transform;
-      }
+  .subtitle {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: clamp(18px, 2.5vw, 40px);
+    font-weight: 900;
+    letter-spacing: 0.03em;
+    color: rgba(245, 240, 232, 0.85);
+    white-space: nowrap;
+    display: inline;
+  }
 
-      .btn#btnMac,
-      .btn#btnWin {
-        background: linear-gradient(180deg, rgba(248, 243, 232, 0.92), rgba(238, 231, 216, 0.82));
-      }
+  .subtitle .highlight { color: var(--gold-bright); }
 
-      .btn:hover {
-        transform: translateY(-2px) scale(1.065);
-        box-shadow: 0 28px 72px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.45);
-        border-color: rgba(0, 0, 0, 0.16);
-        filter: saturate(1.02);
-      }
+  .star-accent {
+    position: absolute;
+    font-size: 18px;
+    color: var(--gold-bright);
+    animation: twinkleAccent 2s ease-in-out infinite;
+    filter: drop-shadow(0 0 5px var(--gold-bright));
+    pointer-events: none;
+  }
+  @keyframes twinkleAccent {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.3; transform: scale(0.6); }
+  }
 
-      .btn svg {
-        width: 18px;
-        height: 18px;
-        fill: rgba(14, 18, 28, 0.92);
-        filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.18));
-      }
+  /* Buttons — moved down extra 50px via margin-top */
+  .buttons-wrap {
+    display: flex;
+    gap: 24px;
+    margin-top: 130px;
+    animation-delay: 0.8s;
+    justify-content: center;
+    align-self: center;
+    flex-wrap: wrap;
+  }
 
-      .btn img.icon {
-        width: 18px;
-        height: 18px;
-        object-fit: contain;
-      }
+  .dl-btn {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--bone);
+    border: none;
+    border-radius: 14px;
+    padding: 18px 32px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 4px 30px rgba(0,0,0,0.5);
+    position: relative;
+    overflow: hidden;
+  }
 
-      /* hide old fine print */
-      .fine {
-        display: none;
-      }
+  .dl-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.18) 0%, transparent 60%);
+    pointer-events: none;
+  }
 
-      @media (prefers-reduced-motion: reduce) {
-        .planet,
-        .shooting-star,
-        .intro,
-        .star.twinkle {
-          animation: none !important;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="space" id="space">
-      <div class="starLayer" id="starLayer" aria-hidden="true"></div>
-      <div class="planet sun" aria-hidden="true"></div>
-      <div class="planet mercury" aria-hidden="true"></div>
-      <div class="planet earth" aria-hidden="true"></div>
-      <div class="planet mars" aria-hidden="true"></div>
-      <div class="planet jupiter" aria-hidden="true"></div>
-      <div class="shooting-layer" id="shootingLayer" aria-hidden="true"></div>
-      <div class="vignette" aria-hidden="true"></div>
-      <div class="noise" aria-hidden="true"></div>
+  .dl-btn:hover {
+    transform: translateY(-4px) scale(1.03);
+    box-shadow: 0 14px 50px rgba(212, 168, 83, 0.4);
+    background: #FAF5EC;
+  }
 
-      <main class="content">
-        <section class="hero" role="region" aria-label="Taskeroid downloads">
-          <div class="titleBlock">
-              <div class="titleBlockBox">
-                  <h1 class="title intro delay1"><span>Taskeroid</span></h1>
-                  <p class="tagline intro delay2">Organise your tasks to reach the stars</p>
-                </div>
-            <div class="ctaRow intro delay3">
-              <a class="btn" id="btnMac" href="#" download>
-                <img src="icons/apple.png" alt="Apple" class="icon">
-                Download for macOS
-              </a>
-              <a class="btn" id="btnWin" href="#" download>
-                <img src="icons/windows.png" alt="Windows" class="icon">
-                Download for Windows
-              </a>
-            </div>
+  .btn-icon {
+    width: 34px; height: 34px;
+    object-fit: contain;
+  }
+
+  /* Apple icon has black bg — invert to make it dark on bone button */
+  .btn-icon-apple {
+    filter: invert(1) brightness(0.15);
+  }
+
+  .btn-text {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+  }
+
+  .btn-label {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #8a7355;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .btn-name {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 20px;
+    letter-spacing: 0.01em;
+    color: #1a1510;
+    line-height: 1;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="starCanvas"></canvas>
+
+<!-- Planet wrappers -->
+<div class="planet-wrap pos-mars"    id="pw-mars"></div>
+<div class="planet-wrap pos-jupiter" id="pw-jupiter"></div>
+<div class="planet-wrap pos-saturn"  id="pw-saturn"></div>
+<div class="planet-wrap pos-blue"    id="pw-blue"></div>
+<div class="planet-wrap pos-pluto"   id="pw-pluto"></div>
+<div class="planet-wrap pos-moon"    id="pw-moon"></div>
+<div class="planet-wrap pos-teal"    id="pw-teal"></div>
+
+<div id="mainContent">
+  <div class="hero">
+    <div class="hero-block">
+
+      <div class="animate-in" style="animation-delay:0.3s; text-align:center;">
+        <h1 class="title">Taskeroid</h1>
+      </div>
+
+      <div class="subtitle-wrap animate-in" style="animation-delay:0.55s">
+        <p class="subtitle" id="subtitleText">
+          <span class="highlight">Organise</span> your tasks to reach the stars
+        </p>
+      </div>
+
+      <div class="buttons-wrap animate-in" style="animation-delay:0.8s">
+        <a href="downloads/taskeroid.dmg" download class="dl-btn">
+          <img class="btn-icon btn-icon-apple" src="icons/apple.png" alt="macOS">
+          <div class="btn-text">
+            <span class="btn-label">Download on</span>
+            <span class="btn-name">MacOS</span>
           </div>
-        </section>
-      </main>
+        </a>
+        <a href="downloads/taskeroid.exe" download class="dl-btn">
+          <img class="btn-icon" src="icons/windows.png" alt="Windows">
+          <div class="btn-text">
+            <span class="btn-label">Download on</span>
+            <span class="btn-name">Windows</span>
+          </div>
+        </a>
+      </div>
+
     </div>
+  </div>
+</div>
 
-    <script>
-      // Create a dense night sky full of stars (DOM-based so it's always visible)
-      (function makeStars() {
-        const layer = document.getElementById('starLayer');
-        if (!layer) return;
+<script>
+// ===== PLANET RENDERING =====
+const planetDefs = [
+  { id:'pw-mars',    src:'planets/Mars.png',    size:260, spin:'planet-spin',      glow:'rgba(200,80,20,0.4)',    circle:true  },
+  { id:'pw-jupiter', src:'planets/Jupiter.png',  size:240, spin:'planet-spin-vslow',glow:'rgba(180,150,80,0.25)', circle:false },
+  { id:'pw-saturn',  src:'planets/Saturn.png',  size:200, spin:'planet-spin-slow', glow:'rgba(200,170,80,0.35)', circle:false },
+  { id:'pw-blue',    src:'planets/Planet3.png', size:160, spin:'planet-spin-rev',  glow:'rgba(30,100,200,0.4)',   circle:true  },
+  { id:'pw-pluto',   src:'planets/Planet1.png', size:120, spin:'planet-spin',      glow:'rgba(150,130,200,0.3)', circle:true  },
+  { id:'pw-moon',    src:'planets/Moon.png',    size:100, spin:'planet-spin-slow', glow:'rgba(180,180,180,0.25)',circle:true  },
+  { id:'pw-teal',    src:'planets/Planet2.png', size:150, spin:'planet-spin-med',  glow:'rgba(0,180,180,0.35)',  circle:true  },
+];
 
-        const count = Math.min(3200, Math.floor((window.innerWidth * window.innerHeight) / 260));
-        const frag = document.createDocumentFragment();
+console.log('[Planets] Page origin:', window.location.origin, '| href:', window.location.href);
 
-        for (let i = 0; i < count; i++) {
-          const s = document.createElement('div');
-          s.className = 'star twinkle';
+planetDefs.forEach(def => {
+  const wrap = document.getElementById(def.id);
 
-          const big = Math.random() < 0.22;
-          const size = (big ? 1.5 : 0.9) + Math.random() * (big ? 2.8 : 1.2);
-          const alpha = (big ? 0.55 : 0.22) + Math.random() * (big ? 0.45 : 0.55);
-          const tw = 1.2 + Math.random() * 3.4;
+  if (!wrap) {
+    console.error(`[Planets] ❌ Wrapper element NOT FOUND in DOM: #${def.id}`);
+    return;
+  }
+  console.log(`[Planets] ✅ Wrapper found: #${def.id}`);
 
-          s.style.left = (Math.random() * 100).toFixed(3) + 'vw';
-          s.style.top = (Math.random() * 100).toFixed(3) + 'vh';
-          s.style.setProperty('--s', size.toFixed(2) + 'px');
-          s.style.setProperty('--a', alpha.toFixed(3));
-          s.style.setProperty('--t', tw.toFixed(2) + 's');
+  const img = new Image();
 
-          frag.appendChild(s);
-        }
+  img.onload = () => {
+    console.log(`[Planets] ✅ Image loaded: ${def.src} (${img.naturalWidth}×${img.naturalHeight})`);
 
-        layer.innerHTML = '';
-        layer.appendChild(frag);
-      })();
+    const aspect = img.naturalHeight / img.naturalWidth;
+    const w = def.size;
+    const h = def.circle ? def.size : Math.round(w * aspect);
 
-      // Download URL placeholders
-      const DOWNLOADS = {
-        mac: 'downloads/Taskeroid-mac.dmg',
-        win: 'downloads/Taskeroid-windows.exe'
-      };
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const cx = c.getContext('2d');
 
-      const btnMac = document.getElementById('btnMac');
-      const btnWin = document.getElementById('btnWin');
-      btnMac.href = DOWNLOADS.mac;
-      btnWin.href = DOWNLOADS.win;
+    if (!cx) {
+      console.error(`[Planets] ❌ Could not get 2D context for: ${def.src}`);
+      return;
+    }
 
-      // Shooting stars: one every ~10 seconds at different locations
-      const layer = document.getElementById('shootingLayer');
+    if (def.circle) {
+      cx.save();
+      cx.beginPath();
+      cx.arc(w/2, h/2, w/2, 0, Math.PI*2);
+      cx.clip();
+      cx.drawImage(img, 0, 0, w, h);
+      cx.restore();
+    } else {
+      cx.drawImage(img, 0, 0, w, h);
+    }
 
-      function spawnShootingStar() {
-        const star = document.createElement('div');
-        star.className = 'shooting-star';
+    // Check if canvas is blank (possible CORS taint)
+    try {
+      const pixel = cx.getImageData(w/2, h/2, 1, 1).data;
+      console.log(`[Planets] 🎨 Centre pixel RGBA for ${def.src}: [${pixel[0]}, ${pixel[1]}, ${pixel[2]}, ${pixel[3]}]`);
+      if (pixel[3] === 0) console.warn(`[Planets] ⚠️ Centre pixel is transparent — image may not have drawn correctly`);
+    } catch(e) {
+      console.error(`[Planets] ❌ getImageData failed (CORS/taint?) for ${def.src}:`, e.message);
+    }
 
-        // Random start location (prefer upper half for realism)
-        const startX = Math.random() * window.innerWidth * 0.85;
-        const startY = Math.random() * window.innerHeight * 0.55;
+    c.style.filter = `drop-shadow(0 0 20px ${def.glow})`;
+    c.classList.add(def.spin);
+    wrap.appendChild(c);
+    wrap.style.width = w + 'px';
+    wrap.style.height = h + 'px';
+    console.log(`[Planets] 🪐 Canvas appended to #${def.id} (${w}×${h})`);
+  };
 
-        // Random trajectory
-        const angle = -20 - Math.random() * 25; // degrees
-        const tx = 260 + Math.random() * 520;
-        const ty = 140 + Math.random() * 360;
+  img.onerror = (e) => {
+    console.error(`[Planets] ❌ FAILED to load image: "${def.src}"`);
+    console.error(`[Planets]    Resolved URL attempted: ${new URL(def.src, window.location.href).href}`);
+    console.error(`[Planets]    Check: does the file exist? Is the server running? Is there a typo?`);
+  };
 
-        star.style.left = `${startX}px`;
-        star.style.top = `${startY}px`;
-        star.style.setProperty('--angle', `${angle}deg`);
-        star.style.setProperty('--tx', `${tx}px`);
-        star.style.setProperty('--ty', `${ty}px`);
+  const resolvedURL = new URL(def.src, window.location.href).href;
+  console.log(`[Planets] 🔄 Loading: ${def.src}  →  ${resolvedURL}`);
+  img.src = def.src;
+});
 
-        layer.appendChild(star);
+// ===== STAR ACCENT =====
+window.addEventListener('load', () => {
+  const subtitle = document.getElementById('subtitleText');
+  const walker = document.createTreeWalker(subtitle, NodeFilter.SHOW_TEXT);
+  let node;
+  while (node = walker.nextNode()) {
+    const idx = node.textContent.indexOf('stars');
+    if (idx !== -1) {
+      const range = document.createRange();
+      range.setStart(node, idx);
+      range.setEnd(node, idx + 5);
+      const rect = range.getBoundingClientRect();
+      const wrapRect = subtitle.parentElement.getBoundingClientRect();
+      const star = document.createElement('span');
+      star.className = 'star-accent';
+      star.textContent = '✦';
+      star.style.left = (rect.right - wrapRect.left + 5) + 'px';
+      star.style.top = '-16px';
+      subtitle.parentElement.appendChild(star);
+      break;
+    }
+  }
+});
 
-        // Cleanup
-        star.addEventListener('animationend', () => {
-          star.remove();
-        });
+// ===== STARFIELD =====
+const canvas = document.getElementById('starCanvas');
+const ctx = canvas.getContext('2d');
+let stars = [], shootingStars = [];
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  createStars();
+}
+
+function createStars() {
+  stars = [];
+  for (let i = 0; i < 2200; i++) {
+    const s = Math.random();
+    stars.push({
+      x: Math.random()*canvas.width, y: Math.random()*canvas.height,
+      r: s<0.7 ? Math.random()*0.8+0.2 : s<0.92 ? Math.random()*1.2+0.6 : Math.random()*2+1,
+      alpha: Math.random()*0.5+0.5,
+      ts: Math.random()*0.02+0.005,
+      to: Math.random()*Math.PI*2,
+      hue: Math.random()<0.15 ? (Math.random()<0.5?220:40) : 210,
+    });
+  }
+}
+
+function createShootingStar() {
+  const angle = (Math.random()*30+10)*Math.PI/180;
+  shootingStars.push({
+    x: Math.random()*canvas.width*0.7,
+    y: Math.random()*canvas.height*0.5,
+    vx: Math.cos(angle)*(Math.random()*8+6),
+    vy: Math.sin(angle)*(Math.random()*8+6),
+    alpha:1, trail:[], maxTrail:28, life:0, maxLife:55,
+  });
+}
+
+let lastShoot=0, nextDelay=2000+Math.random()*3000;
+
+function drawStars(t) {
+  for (const s of stars) {
+    const tw = Math.sin(t*s.ts+s.to);
+    const a = s.alpha*(0.6+0.4*tw);
+    const r = s.r*(0.85+0.15*tw);
+    ctx.save();
+    if (s.r>1.5) {
+      const g=ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,r*4);
+      g.addColorStop(0,`hsla(${s.hue},70%,95%,${a})`);
+      g.addColorStop(0.3,`hsla(${s.hue},60%,85%,${a*0.5})`);
+      g.addColorStop(1,`hsla(${s.hue},50%,80%,0)`);
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(s.x,s.y,r*4,0,Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha=a;
+    ctx.fillStyle=`hsl(${s.hue},70%,97%)`;
+    ctx.beginPath(); ctx.arc(s.x,s.y,r,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawShootingStars() {
+  for (let i=shootingStars.length-1;i>=0;i--) {
+    const ss=shootingStars[i];
+    ss.trail.push({x:ss.x,y:ss.y});
+    if(ss.trail.length>ss.maxTrail) ss.trail.shift();
+    ss.x+=ss.vx; ss.y+=ss.vy; ss.life++;
+    const p=ss.life/ss.maxLife;
+    ss.alpha=p<0.3?p/0.3:1-(p-0.3)/0.7;
+    if(ss.trail.length>1) {
+      for(let j=1;j<ss.trail.length;j++) {
+        const f=j/ss.trail.length;
+        ctx.save();
+        ctx.globalAlpha=f*ss.alpha*0.9;
+        ctx.strokeStyle='rgba(220,230,255,1)';
+        ctx.lineWidth=f*2.5;
+        ctx.shadowBlur=8; ctx.shadowColor='rgba(180,200,255,0.8)';
+        ctx.beginPath();
+        ctx.moveTo(ss.trail[j-1].x,ss.trail[j-1].y);
+        ctx.lineTo(ss.trail[j].x,ss.trail[j].y);
+        ctx.stroke(); ctx.restore();
       }
+    }
+    ctx.save(); ctx.globalAlpha=ss.alpha;
+    const g=ctx.createRadialGradient(ss.x,ss.y,0,ss.x,ss.y,6);
+    g.addColorStop(0,'rgba(255,255,255,1)');
+    g.addColorStop(0.3,'rgba(200,215,255,0.8)');
+    g.addColorStop(1,'rgba(150,170,255,0)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(ss.x,ss.y,6,0,Math.PI*2); ctx.fill(); ctx.restore();
+    if(ss.life>=ss.maxLife) shootingStars.splice(i,1);
+  }
+}
 
-      setTimeout(spawnShootingStar, 1100);
-      setInterval(() => {
-        spawnShootingStar();
-      }, 10000);
+function animate(t) {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawStars(t*0.001);
+  drawShootingStars();
+  if(t-lastShoot>nextDelay) {
+    createShootingStar();
+    lastShoot=t;
+    nextDelay=9000+Math.random()*2000;
+  }
+  requestAnimationFrame(animate);
+}
 
-      // Rebuild stars on resize (throttled)
-      let resizeTimer;
-      window.addEventListener('resize', () => {
-        window.clearTimeout(resizeTimer);
-        resizeTimer = window.setTimeout(() => {
-          // rebuild stars to match viewport
-          const sl = document.getElementById('starLayer');
-          if (sl) sl.innerHTML = '';
-          (function makeStars() {
-            const layer = document.getElementById('starLayer');
-            if (!layer) return;
-
-            const count = Math.min(3200, Math.floor((window.innerWidth * window.innerHeight) / 260));
-            const frag = document.createDocumentFragment();
-
-            for (let i = 0; i < count; i++) {
-              const s = document.createElement('div');
-              s.className = 'star twinkle';
-
-              const big = Math.random() < 0.22;
-              const size = (big ? 1.5 : 0.9) + Math.random() * (big ? 2.8 : 1.2);
-              const alpha = (big ? 0.55 : 0.22) + Math.random() * (big ? 0.45 : 0.55);
-              const tw = 1.2 + Math.random() * 3.4;
-
-              s.style.left = (Math.random() * 100).toFixed(3) + 'vw';
-              s.style.top = (Math.random() * 100).toFixed(3) + 'vh';
-              s.style.setProperty('--s', size.toFixed(2) + 'px');
-              s.style.setProperty('--a', alpha.toFixed(3));
-              s.style.setProperty('--t', tw.toFixed(2) + 's');
-
-              frag.appendChild(s);
-            }
-
-            layer.appendChild(frag);
-          })();
-
-          spawnShootingStar();
-        }, 250);
-      });
-    </script>
-  </body>
+window.addEventListener('resize', resize);
+resize();
+requestAnimationFrame(animate);
+</script>
+</body>
 </html>
