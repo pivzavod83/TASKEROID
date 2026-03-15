@@ -184,7 +184,25 @@ header p {
   font-family: inherit;
 }
 
+.form-row label select {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  margin-top: 4px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  color: var(--text-hi);
+  font-size: 12px;
+  font-family: inherit;
+}
+
 .form-row label input:focus {
+  outline: none;
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px rgba(0, 229, 212, 0.3);
+}
+
+.form-row label select:focus {
   outline: none;
   border-color: var(--cyan);
   box-shadow: 0 0 0 1px rgba(0, 229, 212, 0.3);
@@ -259,6 +277,20 @@ header p {
 
 .task-item.urgency-critical { border-left-color: var(--red); }
 .task-item.urgency-warning  { border-left-color: var(--amber); }
+
+.task-item.focus-dimmed {
+  opacity: 0.55;
+}
+
+.task-item.focus-active {
+  border-left-color: var(--green);
+  box-shadow: 0 0 0 1px rgba(0, 214, 143, 0.35), 0 0 22px rgba(0, 214, 143, 0.14);
+}
+
+.task-item.task-locked {
+  border-left-color: rgba(136, 170, 190, 0.7);
+  background: rgba(6, 18, 28, 0.85);
+}
 
 .task-item-header {
   display: flex;
@@ -360,8 +392,32 @@ header p {
   letter-spacing: 0.03em;
 }
 
+.task-item select {
+  padding: 6px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  color: var(--text-hi);
+  font-size: 13px;
+  font-family: inherit;
+  width: 100%;
+  letter-spacing: 0.03em;
+}
+
 .task-item input:focus {
   outline: none;
   border-color: var(--cyan);
   box-shadow: 0 0 0 1px rgba(0, 229, 212, 0.3);
+}
+
+.task-item select:focus {
+  outline: none;
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px rgba(0, 229, 212, 0.3);
+}
+
+.task-item button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: rgba(58, 96, 112, 0.5);
+  color: rgba(58, 96, 112, 0.9);
 }

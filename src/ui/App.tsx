@@ -15,6 +15,7 @@ declare const window: Window & {
 
 export function App(): React.ReactElement {
   const [tasks, setTasks] = useState<TaskData[]>([]);
+  const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     const api = window.taskeroidUI;
@@ -24,12 +25,30 @@ export function App(): React.ReactElement {
     return unsub;
   }, []);
 
-  const handleAdd = async (title: string, importance: number, deadline: number) => {
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('taskeroid-focus', { detail: { taskId: focusTaskId } }));
+  }, [focusTaskId]);
+
+  useEffect(() => {
+    if (focusTaskId && !tasks.some((task) => task.id === focusTaskId)) {
+      setFocusTaskId(null);
+    }
+  }, [focusTaskId, tasks]);
+
+  const handleAdd = async (
+    title: string,
+    importance: number,
+    deadline: number,
+    depends_on: string | null,
+    repeat_type: TaskData['repeat_type']
+  ) => {
     await window.taskeroidUI?.addTask({
       title,
       importance,
       deadline,
       completed: false,
+      depends_on,
+      repeat_type,
     });
   };
 
@@ -43,7 +62,13 @@ export function App(): React.ReactElement {
 
   const handleEdit = async (
     id: string,
-    updates: { title?: string; importance?: number; deadline?: number }
+    updates: {
+      title?: string;
+      importance?: number;
+      deadline?: number;
+      depends_on?: string | null;
+      repeat_type?: TaskData['repeat_type'];
+    }
   ) => {
     await window.taskeroidUI?.updateTask(id, updates);
   };
@@ -59,12 +84,15 @@ export function App(): React.ReactElement {
           </div>
           <p>ORBITAL THREAT MONITOR // ASTEROID TRACKING SYSTEM</p>
       </header>
-      <TaskForm onSubmit={handleAdd} />
+      <TaskForm onSubmit={handleAdd} tasks={tasks} />
       <TaskList
         tasks={tasks}
         onComplete={handleComplete}
         onDelete={handleDelete}
         onEdit={handleEdit}
+        focusTaskId={focusTaskId}
+        onFocusTask={(taskId) => setFocusTaskId(taskId)}
+        onClearFocus={() => setFocusTaskId(null)}
       />
     </div>
   );

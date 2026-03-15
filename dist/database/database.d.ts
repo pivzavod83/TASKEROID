@@ -1,7 +1,8 @@
 import { Task } from '../models/task';
+export declare function getActiveTasks(): Task[];
 export declare function getAllTasks(): Task[];
 export declare function addTask(task: Task): void;
-export declare function updateTask(id: string, updates: Partial<Pick<Task, 'title' | 'importance' | 'deadline' | 'completed'>>): void;
+export declare function updateTask(id: string, updates: Partial<Pick<Task, 'title' | 'importance' | 'deadline' | 'completed' | 'depends_on' | 'repeat_type'>>): void;
 export declare function deleteTask(id: string): void;
 export declare function getTaskById(id: string): Task | null;
 export declare function seedDemoIfEmpty(): void;

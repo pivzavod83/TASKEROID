@@ -16,7 +16,7 @@ exports.getAsteroidDistance = getAsteroidDistance;
 exports.hasCollided = hasCollided;
 exports.MAX_TIME_WINDOW_SEC = 30 * 24 * 3600; // 30 days reference window
 exports.DISTANCE_DECAY_SEC = 10 * 24 * 3600; // 10 days: month-away tasks sit near outer ring
-exports.MIN_RADIUS = 1.8; // Just outside planet surface
+exports.MIN_RADIUS = 2.35; // Keep near-deadline asteroids visibly farther from planet
 exports.MAX_RADIUS = 12; // Near screen boundary (responsive in renderer)
 exports.MIN_ASTEROID_SIZE = 0.2;
 exports.MAX_ASTEROID_SIZE = 0.9;
@@ -35,9 +35,15 @@ function importanceToSize(importance) {
  */
 function getAsteroidDistance(task, currentTime, maxRadius = exports.MAX_RADIUS) {
     const timeRemaining = Math.max(0, task.deadline - currentTime);
-    // Monotonic mapping: more time left => farther, always bounded inside maxRadius.
-    const progress = 1 - Math.exp(-timeRemaining / exports.DISTANCE_DECAY_SEC);
-    return exports.MIN_RADIUS + progress * (maxRadius - exports.MIN_RADIUS);
+    const normalized = Math.min(1, timeRemaining / exports.MAX_TIME_WINDOW_SEC);
+    // Priority shapes orbital lane but remains strictly time-monotonic.
+    // Lower priority => farther out for the same remaining time.
+    const clampedImportance = Math.max(1, Math.min(5, task.importance));
+    const lowPriorityBias = ((5 - clampedImportance) / 4) * 0.55;
+    // Power > 1 makes near-deadline movement accelerate inward.
+    const urgencyCurve = Math.pow(normalized, 1.45 + lowPriorityBias);
+    const distance = exports.MIN_RADIUS + urgencyCurve * (maxRadius - exports.MIN_RADIUS);
+    return Math.max(exports.MIN_RADIUS, Math.min(maxRadius, distance));
 }
 /**
  * Check if asteroid has reached/collided with planet

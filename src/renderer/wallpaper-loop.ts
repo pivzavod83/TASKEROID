@@ -48,6 +48,8 @@ let asteroidEditBackdrop: HTMLDivElement | null = null;
 let planetScaleCurrent = 1;
 let completionEffects: Map<string, CompletionEffect> = new Map();
 let planetShieldPulses: PlanetShieldPulse[] = [];
+let latestTasks: Task[] = [];
+let focusTaskId: string | null = null;
 
 const HOVER_SCALE = 1.12;
 const PLANET_SCALE_LERP = 10;
@@ -338,6 +340,10 @@ export function playTaskCompleteAnimation(taskId: string): void {
   completionEffects.set(taskId, effect);
 }
 
+export function setFocusTask(taskId: string | null): void {
+  focusTaskId = taskId;
+}
+
 function getCanvasViewportSize(canvas: HTMLCanvasElement): { width: number; height: number } {
   const rect = canvas.getBoundingClientRect();
   const width = Math.max(1, Math.floor(rect.width || window.innerWidth));
@@ -431,9 +437,27 @@ function openAsteroidEdit(task: Task): void {
       <label>Importance (1–5)</label>
       <input type="number" min="1" max="5" id="edit-importance" value="${task.importance}" />
     </div>
+    <div class="form-group">
+      <label>Depends on</label>
+      <select id="edit-depends-on">
+        <option value="">None</option>
+        ${latestTasks
+          .filter((candidate) => !candidate.completed && candidate.id !== task.id)
+          .map((candidate) => `<option value="${escapeHtml(candidate.id)}" ${task.depends_on === candidate.id ? 'selected' : ''}>${escapeHtml(candidate.title)}</option>`)
+          .join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Repeat</label>
+      <select id="edit-repeat-type">
+        <option value="none" ${task.repeat_type === 'none' ? 'selected' : ''}>None</option>
+        <option value="daily" ${task.repeat_type === 'daily' ? 'selected' : ''}>Daily</option>
+        <option value="weekly" ${task.repeat_type === 'weekly' ? 'selected' : ''}>Weekly</option>
+      </select>
+    </div>
     <div class="actions">
       <button type="button" class="primary" id="edit-save">Save</button>
-      <button type="button" id="edit-complete">Complete</button>
+      <button type="button" id="edit-complete" ${task.isUnlocked === false ? 'disabled' : ''}>Complete</button>
       <button type="button" class="delete" id="edit-delete">Delete</button>
     </div>
   `;
@@ -447,8 +471,11 @@ function openAsteroidEdit(task: Task): void {
     const title = (document.getElementById('edit-title') as HTMLInputElement)?.value?.trim() || task.title;
     const date = (document.getElementById('edit-deadline') as HTMLInputElement)?.value || defaultDate;
     const importance = Math.max(1, Math.min(5, Number((document.getElementById('edit-importance') as HTMLInputElement)?.value) || 3));
+    const dependsOn = (document.getElementById('edit-depends-on') as HTMLSelectElement)?.value || null;
+    const repeatTypeRaw = (document.getElementById('edit-repeat-type') as HTMLSelectElement)?.value;
+    const repeat_type = repeatTypeRaw === 'daily' || repeatTypeRaw === 'weekly' ? repeatTypeRaw : 'none';
     const deadline = Math.floor(new Date(`${date}T23:59:59`).getTime() / 1000);
-    saveAndClose({ title, deadline, importance });
+    saveAndClose({ title, deadline, importance, depends_on: dependsOn, repeat_type });
   };
 
   const handleComplete = (): void => saveAndClose({ completed: true });
@@ -586,6 +613,25 @@ export function initWallpaper(canvas: HTMLCanvasElement, onCollision?: (taskId: 
       }
       const isHovered = asteroid === hoveredAsteroid;
       updateAsteroidPosition(asteroid, task, now, maxRadius, deltaSec, isHovered);
+
+      const hasFocus = focusTaskId !== null && asteroids.has(focusTaskId);
+      const isFocused = hasFocus && taskId === focusTaskId;
+      const isDimmed = hasFocus && !isFocused;
+
+      const meshMat = asteroid.mesh.material as THREE.SpriteMaterial;
+      const flameMat = asteroid.flame.material as THREE.SpriteMaterial;
+      const routeMat = asteroid.routeLine.material as THREE.LineDashedMaterial;
+      const labelMat = asteroid.label.material as THREE.SpriteMaterial;
+
+      meshMat.opacity = isDimmed ? 0.2 : 1;
+      flameMat.opacity = Math.min(1, flameMat.opacity * (isDimmed ? 0.12 : (isFocused ? 1.1 : 1)));
+      routeMat.opacity = Math.min(1, routeMat.opacity * (isDimmed ? 0.08 : (isFocused ? 1.15 : 1)));
+      labelMat.opacity = Math.min(1, labelMat.opacity * (isDimmed ? 0.28 : (isFocused ? 1.05 : 1)));
+
+      if (isFocused) {
+        asteroid.mesh.scale.multiplyScalar(1.08);
+        asteroid.flame.scale.multiplyScalar(1.06);
+      }
     });
 
     updateHoverAndTooltip();
@@ -608,7 +654,12 @@ function onResize(): void {
 }
 
 export function setTasks(tasks: Task[]): void {
-  const ids = new Set(tasks.map((t) => t.id));
+  latestTasks = tasks;
+  const now = Date.now() / 1000;
+  const visibleTasks = tasks
+    .filter((t) => t.isUnlocked !== false)
+    .filter((t) => !hasCollided(t, now));
+  const ids = new Set(visibleTasks.map((t) => t.id));
 
   asteroids.forEach((asteroid, taskId) => {
     if (!ids.has(taskId)) {
@@ -617,9 +668,7 @@ export function setTasks(tasks: Task[]): void {
     }
   });
 
-  const now = Date.now() / 1000;
-  const activeTasks = tasks
-    .filter((t) => !hasCollided(t, now))
+  const activeTasks = visibleTasks
     .sort((a, b) => (a.deadline - b.deadline) || a.id.localeCompare(b.id));
   const totalTasks = activeTasks.length;
   const angleStart = -Math.PI / 2;

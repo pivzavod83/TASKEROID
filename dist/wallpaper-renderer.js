@@ -20364,7 +20364,7 @@
   // src/physics/asteroid-physics.ts
   var MAX_TIME_WINDOW_SEC = 30 * 24 * 3600;
   var DISTANCE_DECAY_SEC = 10 * 24 * 3600;
-  var MIN_RADIUS = 1.8;
+  var MIN_RADIUS = 2.35;
   var MAX_RADIUS = 12;
   var MIN_ASTEROID_SIZE = 0.2;
   var MAX_ASTEROID_SIZE = 0.9;
@@ -20374,8 +20374,12 @@
   }
   function getAsteroidDistance(task, currentTime, maxRadius = MAX_RADIUS) {
     const timeRemaining = Math.max(0, task.deadline - currentTime);
-    const progress = 1 - Math.exp(-timeRemaining / DISTANCE_DECAY_SEC);
-    return MIN_RADIUS + progress * (maxRadius - MIN_RADIUS);
+    const normalized = Math.min(1, timeRemaining / MAX_TIME_WINDOW_SEC);
+    const clampedImportance = Math.max(1, Math.min(5, task.importance));
+    const lowPriorityBias = (5 - clampedImportance) / 4 * 0.55;
+    const urgencyCurve = Math.pow(normalized, 1.45 + lowPriorityBias);
+    const distance = MIN_RADIUS + urgencyCurve * (maxRadius - MIN_RADIUS);
+    return Math.max(MIN_RADIUS, Math.min(maxRadius, distance));
   }
   function hasCollided(task, currentTime) {
     return currentTime >= task.deadline;
@@ -21186,6 +21190,8 @@
   var planetScaleCurrent = 1;
   var completionEffects = /* @__PURE__ */ new Map();
   var planetShieldPulses = [];
+  var latestTasks = [];
+  var focusTaskId = null;
   var HOVER_SCALE = 1.12;
   var PLANET_SCALE_LERP = 10;
   function createExplosionTexture() {
@@ -21419,6 +21425,9 @@
     const effect = createCompletionEffect(taskId, asteroid);
     completionEffects.set(taskId, effect);
   }
+  function setFocusTask(taskId) {
+    focusTaskId = taskId;
+  }
   function getCanvasViewportSize(canvas2) {
     const rect = canvas2.getBoundingClientRect();
     const width = Math.max(1, Math.floor(rect.width || window.innerWidth));
@@ -21511,9 +21520,24 @@
       <label>Importance (1\u20135)</label>
       <input type="number" min="1" max="5" id="edit-importance" value="${task.importance}" />
     </div>
+    <div class="form-group">
+      <label>Depends on</label>
+      <select id="edit-depends-on">
+        <option value="">None</option>
+        ${latestTasks.filter((candidate) => !candidate.completed && candidate.id !== task.id).map((candidate) => `<option value="${escapeHtml(candidate.id)}" ${task.depends_on === candidate.id ? "selected" : ""}>${escapeHtml(candidate.title)}</option>`).join("")}
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Repeat</label>
+      <select id="edit-repeat-type">
+        <option value="none" ${task.repeat_type === "none" ? "selected" : ""}>None</option>
+        <option value="daily" ${task.repeat_type === "daily" ? "selected" : ""}>Daily</option>
+        <option value="weekly" ${task.repeat_type === "weekly" ? "selected" : ""}>Weekly</option>
+      </select>
+    </div>
     <div class="actions">
       <button type="button" class="primary" id="edit-save">Save</button>
-      <button type="button" id="edit-complete">Complete</button>
+      <button type="button" id="edit-complete" ${task.isUnlocked === false ? "disabled" : ""}>Complete</button>
       <button type="button" class="delete" id="edit-delete">Delete</button>
     </div>
   `;
@@ -21525,8 +21549,11 @@
       const title = document.getElementById("edit-title")?.value?.trim() || task.title;
       const date = document.getElementById("edit-deadline")?.value || defaultDate;
       const importance = Math.max(1, Math.min(5, Number(document.getElementById("edit-importance")?.value) || 3));
+      const dependsOn = document.getElementById("edit-depends-on")?.value || null;
+      const repeatTypeRaw = document.getElementById("edit-repeat-type")?.value;
+      const repeat_type = repeatTypeRaw === "daily" || repeatTypeRaw === "weekly" ? repeatTypeRaw : "none";
       const deadline = Math.floor((/* @__PURE__ */ new Date(`${date}T23:59:59`)).getTime() / 1e3);
-      saveAndClose({ title, deadline, importance });
+      saveAndClose({ title, deadline, importance, depends_on: dependsOn, repeat_type });
     };
     const handleComplete = () => saveAndClose({ completed: true });
     const handleDelete = () => {
@@ -21642,6 +21669,21 @@
         }
         const isHovered = asteroid === hoveredAsteroid;
         updateAsteroidPosition(asteroid, task, now, maxRadius, deltaSec, isHovered);
+        const hasFocus = focusTaskId !== null && asteroids.has(focusTaskId);
+        const isFocused = hasFocus && taskId === focusTaskId;
+        const isDimmed = hasFocus && !isFocused;
+        const meshMat = asteroid.mesh.material;
+        const flameMat = asteroid.flame.material;
+        const routeMat = asteroid.routeLine.material;
+        const labelMat = asteroid.label.material;
+        meshMat.opacity = isDimmed ? 0.2 : 1;
+        flameMat.opacity = Math.min(1, flameMat.opacity * (isDimmed ? 0.12 : isFocused ? 1.1 : 1));
+        routeMat.opacity = Math.min(1, routeMat.opacity * (isDimmed ? 0.08 : isFocused ? 1.15 : 1));
+        labelMat.opacity = Math.min(1, labelMat.opacity * (isDimmed ? 0.28 : isFocused ? 1.05 : 1));
+        if (isFocused) {
+          asteroid.mesh.scale.multiplyScalar(1.08);
+          asteroid.flame.scale.multiplyScalar(1.06);
+        }
       });
       updateHoverAndTooltip();
       renderer.render(scene, camera);
@@ -21660,7 +21702,10 @@
     renderer.setSize(size.width, size.height, false);
   }
   function setTasks(tasks) {
-    const ids = new Set(tasks.map((t) => t.id));
+    latestTasks = tasks;
+    const now = Date.now() / 1e3;
+    const visibleTasks = tasks.filter((t) => t.isUnlocked !== false).filter((t) => !hasCollided(t, now));
+    const ids = new Set(visibleTasks.map((t) => t.id));
     asteroids.forEach((asteroid, taskId) => {
       if (!ids.has(taskId)) {
         if (completionEffects.has(taskId))
@@ -21668,8 +21713,7 @@
         removeAsteroidImmediately(taskId, asteroid);
       }
     });
-    const now = Date.now() / 1e3;
-    const activeTasks = tasks.filter((t) => !hasCollided(t, now)).sort((a, b) => a.deadline - b.deadline || a.id.localeCompare(b.id));
+    const activeTasks = visibleTasks.sort((a, b) => a.deadline - b.deadline || a.id.localeCompare(b.id));
     const totalTasks = activeTasks.length;
     const angleStart = -Math.PI / 2;
     activeTasks.forEach((task, index) => {
@@ -21744,6 +21788,11 @@
   });
   window.taskeroid?.onTaskCompleted?.((taskId) => {
     playTaskCompleteAnimation(taskId);
+  });
+  window.addEventListener("taskeroid-focus", (event) => {
+    const custom = event;
+    const taskId = custom.detail?.taskId ?? null;
+    setFocusTask(taskId);
   });
   window.addEventListener("beforeunload", stopWallpaper);
 })();

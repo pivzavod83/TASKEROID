@@ -11,7 +11,9 @@ exports.CREATE_TASKS_TABLE = `
     importance INTEGER NOT NULL CHECK(importance >= 1 AND importance <= 5),
     deadline INTEGER NOT NULL,
     created_at INTEGER NOT NULL,
-    completed INTEGER NOT NULL DEFAULT 0
+    completed INTEGER NOT NULL DEFAULT 0,
+    depends_on TEXT,
+    repeat_type TEXT NOT NULL DEFAULT 'none' CHECK(repeat_type IN ('none', 'daily', 'weekly'))
   )
 `;
 exports.INIT_SQL = exports.CREATE_TASKS_TABLE;

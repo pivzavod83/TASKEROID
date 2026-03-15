@@ -23595,11 +23595,15 @@
   }
   function TaskItem({
     task,
+    tasks,
+    focusTaskId,
     isEditing,
     onStartEdit,
     onEndEdit,
     onComplete,
     onDelete,
+    onFocus,
+    onClearFocus,
     onEdit
   }) {
     const [title, setTitle] = (0, import_react.useState)(task.title);
@@ -23607,9 +23611,20 @@
     const [deadline, setDeadline] = (0, import_react.useState)(
       new Date(task.deadline * 1e3).toISOString().slice(0, 10)
     );
+    const [dependsOn, setDependsOn] = (0, import_react.useState)(task.depends_on ?? "");
+    const [repeatType, setRepeatType] = (0, import_react.useState)(task.repeat_type ?? "none");
+    const isLocked = task.isUnlocked === false;
+    const isFocused = focusTaskId === task.id;
+    const isDimmed = focusTaskId !== null && !isFocused;
     const handleSave = () => {
       const d = Math.floor((/* @__PURE__ */ new Date(`${deadline}T23:59:59`)).getTime() / 1e3);
-      onEdit(task.id, { title, importance, deadline: d });
+      onEdit(task.id, {
+        title,
+        importance,
+        deadline: d,
+        depends_on: dependsOn || null,
+        repeat_type: repeatType
+      });
       onEndEdit();
     };
     if (isEditing) {
@@ -23636,10 +23651,19 @@
           value: deadline,
           onChange: (e) => setDeadline(e.target.value)
         }
+      ), /* @__PURE__ */ import_react.default.createElement("select", { value: dependsOn, onChange: (e) => setDependsOn(e.target.value) }, /* @__PURE__ */ import_react.default.createElement("option", { value: "" }, "No dependency"), tasks.filter((candidate) => !candidate.completed && candidate.id !== task.id).map((candidate) => /* @__PURE__ */ import_react.default.createElement("option", { key: candidate.id, value: candidate.id }, candidate.title))), /* @__PURE__ */ import_react.default.createElement(
+        "select",
+        {
+          value: repeatType,
+          onChange: (e) => setRepeatType(e.target.value)
+        },
+        /* @__PURE__ */ import_react.default.createElement("option", { value: "none" }, "No repeat"),
+        /* @__PURE__ */ import_react.default.createElement("option", { value: "daily" }, "Daily"),
+        /* @__PURE__ */ import_react.default.createElement("option", { value: "weekly" }, "Weekly")
       ), /* @__PURE__ */ import_react.default.createElement("div", { className: "actions" }, /* @__PURE__ */ import_react.default.createElement("button", { onClick: handleSave }, "Save"), /* @__PURE__ */ import_react.default.createElement("button", { onClick: onEndEdit }, "Cancel")));
     }
     const urg = urgencyClass(task.deadline);
-    return /* @__PURE__ */ import_react.default.createElement("li", { className: `task-item${urg ? " " + urg : ""}` }, /* @__PURE__ */ import_react.default.createElement("div", { className: "task-item-header" }, /* @__PURE__ */ import_react.default.createElement("span", { className: "title" }, task.title), /* @__PURE__ */ import_react.default.createElement(ImportancePips, { value: task.importance })), /* @__PURE__ */ import_react.default.createElement("span", { className: "meta" }, "DUE\xA0", /* @__PURE__ */ import_react.default.createElement("span", { className: "deadline-value" }, formatDeadline(task.deadline)), "\xA0\xA0ETA\xA0", /* @__PURE__ */ import_react.default.createElement("span", { className: "deadline-value" }, formatTimeRemaining(task.deadline))), /* @__PURE__ */ import_react.default.createElement("div", { className: "actions" }, /* @__PURE__ */ import_react.default.createElement("button", { onClick: onComplete }, "\u25D9 CONFIRM"), /* @__PURE__ */ import_react.default.createElement("button", { onClick: onStartEdit }, "\u270E EDIT"), /* @__PURE__ */ import_react.default.createElement("button", { onClick: onDelete, className: "delete" }, "\u2715 DESTROY")));
+    return /* @__PURE__ */ import_react.default.createElement("li", { className: `task-item${urg ? " " + urg : ""}${isDimmed ? " focus-dimmed" : ""}${isFocused ? " focus-active" : ""}${isLocked ? " task-locked" : ""}` }, /* @__PURE__ */ import_react.default.createElement("div", { className: "task-item-header" }, /* @__PURE__ */ import_react.default.createElement("span", { className: "title" }, task.title), /* @__PURE__ */ import_react.default.createElement(ImportancePips, { value: task.importance })), /* @__PURE__ */ import_react.default.createElement("span", { className: "meta" }, "DUE\xA0", /* @__PURE__ */ import_react.default.createElement("span", { className: "deadline-value" }, formatDeadline(task.deadline)), "\xA0\xA0ETA\xA0", /* @__PURE__ */ import_react.default.createElement("span", { className: "deadline-value" }, formatTimeRemaining(task.deadline))), /* @__PURE__ */ import_react.default.createElement("span", { className: "meta" }, isLocked ? "CHAIN LOCKED" : "CHAIN READY", task.repeat_type !== "none" ? `  //  REPEAT ${task.repeat_type.toUpperCase()}` : ""), /* @__PURE__ */ import_react.default.createElement("div", { className: "actions" }, /* @__PURE__ */ import_react.default.createElement("button", { onClick: onComplete, disabled: isLocked }, "\u25D9 CONFIRM"), isFocused ? /* @__PURE__ */ import_react.default.createElement("button", { onClick: onClearFocus }, "UNFOCUS") : /* @__PURE__ */ import_react.default.createElement("button", { onClick: onFocus }, "FOCUS"), /* @__PURE__ */ import_react.default.createElement("button", { onClick: onStartEdit }, "\u270E EDIT"), /* @__PURE__ */ import_react.default.createElement("button", { onClick: onDelete, className: "delete" }, "\u2715 DESTROY")));
   }
 
   // src/ui/TaskList.tsx
@@ -23647,6 +23671,9 @@
     tasks,
     onComplete,
     onDelete,
+    focusTaskId,
+    onFocusTask,
+    onClearFocus,
     onEdit
   }) {
     const [editingId, setEditingId] = (0, import_react2.useState)(null);
@@ -23656,11 +23683,15 @@
       {
         key: task.id,
         task,
+        tasks: activeTasks,
+        focusTaskId,
         isEditing: editingId === task.id,
         onStartEdit: () => setEditingId(task.id),
         onEndEdit: () => setEditingId(null),
         onComplete: () => onComplete(task.id),
         onDelete: () => onDelete(task.id),
+        onFocus: () => onFocusTask(task.id),
+        onClearFocus,
         onEdit
       }
     )));
@@ -23668,19 +23699,23 @@
 
   // src/ui/TaskForm.tsx
   var import_react3 = __toESM(require_react());
-  function TaskForm({ onSubmit }) {
+  function TaskForm({ onSubmit, tasks }) {
     const [title, setTitle] = (0, import_react3.useState)("");
     const [importance, setImportance] = (0, import_react3.useState)(3);
     const [deadlineDate, setDeadlineDate] = (0, import_react3.useState)("");
+    const [dependsOn, setDependsOn] = (0, import_react3.useState)("");
+    const [repeatType, setRepeatType] = (0, import_react3.useState)("none");
     const handleSubmit = (e) => {
       e.preventDefault();
       if (!title.trim())
         return;
       const d = deadlineDate || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
       const deadline = Math.floor((/* @__PURE__ */ new Date(`${d}T23:59:59`)).getTime() / 1e3);
-      onSubmit(title.trim(), importance, deadline);
+      onSubmit(title.trim(), importance, deadline, dependsOn || null, repeatType);
       setTitle("");
       setImportance(3);
+      setDependsOn("");
+      setRepeatType("none");
       const tomorrow2 = /* @__PURE__ */ new Date();
       tomorrow2.setDate(tomorrow2.getDate() + 1);
       setDeadlineDate(tomorrow2.toISOString().slice(0, 10));
@@ -23712,12 +23747,22 @@
         value: deadlineDate || defaultDate,
         onChange: (e) => setDeadlineDate(e.target.value)
       }
+    ))), /* @__PURE__ */ import_react3.default.createElement("div", { className: "form-row" }, /* @__PURE__ */ import_react3.default.createElement("label", null, "// DEPENDS ON", /* @__PURE__ */ import_react3.default.createElement("select", { value: dependsOn, onChange: (e) => setDependsOn(e.target.value) }, /* @__PURE__ */ import_react3.default.createElement("option", { value: "" }, "NONE"), tasks.filter((task) => !task.completed).map((task) => /* @__PURE__ */ import_react3.default.createElement("option", { key: task.id, value: task.id }, task.title)))), /* @__PURE__ */ import_react3.default.createElement("label", null, "// REPEAT", /* @__PURE__ */ import_react3.default.createElement(
+      "select",
+      {
+        value: repeatType,
+        onChange: (e) => setRepeatType(e.target.value)
+      },
+      /* @__PURE__ */ import_react3.default.createElement("option", { value: "none" }, "NONE"),
+      /* @__PURE__ */ import_react3.default.createElement("option", { value: "daily" }, "DAILY"),
+      /* @__PURE__ */ import_react3.default.createElement("option", { value: "weekly" }, "WEEKLY")
     ))), /* @__PURE__ */ import_react3.default.createElement("button", { type: "submit" }, "\u25BA TRACK TARGET"));
   }
 
   // src/ui/App.tsx
   function App() {
     const [tasks, setTasks] = (0, import_react4.useState)([]);
+    const [focusTaskId, setFocusTaskId] = (0, import_react4.useState)(null);
     (0, import_react4.useEffect)(() => {
       const api = window.taskeroidUI;
       if (!api)
@@ -23726,12 +23771,22 @@
       const unsub = api.onTasksUpdate(setTasks);
       return unsub;
     }, []);
-    const handleAdd = async (title, importance, deadline) => {
+    (0, import_react4.useEffect)(() => {
+      window.dispatchEvent(new CustomEvent("taskeroid-focus", { detail: { taskId: focusTaskId } }));
+    }, [focusTaskId]);
+    (0, import_react4.useEffect)(() => {
+      if (focusTaskId && !tasks.some((task) => task.id === focusTaskId)) {
+        setFocusTaskId(null);
+      }
+    }, [focusTaskId, tasks]);
+    const handleAdd = async (title, importance, deadline, depends_on, repeat_type) => {
       await window.taskeroidUI?.addTask({
         title,
         importance,
         deadline,
-        completed: false
+        completed: false,
+        depends_on,
+        repeat_type
       });
     };
     const handleComplete = async (id) => {
@@ -23743,13 +23798,16 @@
     const handleEdit = async (id, updates) => {
       await window.taskeroidUI?.updateTask(id, updates);
     };
-    return /* @__PURE__ */ import_react4.default.createElement("div", { className: "app" }, /* @__PURE__ */ import_react4.default.createElement("header", null, /* @__PURE__ */ import_react4.default.createElement("div", { className: "hud-bar" }, /* @__PURE__ */ import_react4.default.createElement("span", { className: "hud-logo" }, "TASKEROID"), /* @__PURE__ */ import_react4.default.createElement("span", { className: "hud-status" }, /* @__PURE__ */ import_react4.default.createElement("span", { className: "hud-status-dot" }), "SYS ONLINE")), /* @__PURE__ */ import_react4.default.createElement("p", null, "ORBITAL THREAT MONITOR // ASTEROID TRACKING SYSTEM")), /* @__PURE__ */ import_react4.default.createElement(TaskForm, { onSubmit: handleAdd }), /* @__PURE__ */ import_react4.default.createElement(
+    return /* @__PURE__ */ import_react4.default.createElement("div", { className: "app" }, /* @__PURE__ */ import_react4.default.createElement("header", null, /* @__PURE__ */ import_react4.default.createElement("div", { className: "hud-bar" }, /* @__PURE__ */ import_react4.default.createElement("span", { className: "hud-logo" }, "TASKEROID"), /* @__PURE__ */ import_react4.default.createElement("span", { className: "hud-status" }, /* @__PURE__ */ import_react4.default.createElement("span", { className: "hud-status-dot" }), "SYS ONLINE")), /* @__PURE__ */ import_react4.default.createElement("p", null, "ORBITAL THREAT MONITOR // ASTEROID TRACKING SYSTEM")), /* @__PURE__ */ import_react4.default.createElement(TaskForm, { onSubmit: handleAdd, tasks }), /* @__PURE__ */ import_react4.default.createElement(
       TaskList,
       {
         tasks,
         onComplete: handleComplete,
         onDelete: handleDelete,
-        onEdit: handleEdit
+        onEdit: handleEdit,
+        focusTaskId,
+        onFocusTask: (taskId) => setFocusTaskId(taskId),
+        onClearFocus: () => setFocusTaskId(null)
       }
     ));
   }

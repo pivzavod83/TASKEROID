@@ -3,14 +3,24 @@ import type { TaskData } from './types';
 
 interface TaskItemProps {
   task: TaskData;
+  tasks: TaskData[];
+  focusTaskId: string | null;
   isEditing: boolean;
   onStartEdit: () => void;
   onEndEdit: () => void;
   onComplete: () => void;
   onDelete: () => void;
+  onFocus: () => void;
+  onClearFocus: () => void;
   onEdit: (
     id: string,
-    u: { title?: string; importance?: number; deadline?: number }
+    u: {
+      title?: string;
+      importance?: number;
+      deadline?: number;
+      depends_on?: string | null;
+      repeat_type?: TaskData['repeat_type'];
+    }
   ) => void;
 }
 
@@ -50,11 +60,15 @@ function ImportancePips({ value }: { value: number }) {
 
 export function TaskItem({
   task,
+  tasks,
+  focusTaskId,
   isEditing,
   onStartEdit,
   onEndEdit,
   onComplete,
   onDelete,
+  onFocus,
+  onClearFocus,
   onEdit,
 }: TaskItemProps): React.ReactElement {
   const [title, setTitle] = useState(task.title);
@@ -62,10 +76,22 @@ export function TaskItem({
   const [deadline, setDeadline] = useState(
     new Date(task.deadline * 1000).toISOString().slice(0, 10)
   );
+  const [dependsOn, setDependsOn] = useState(task.depends_on ?? '');
+  const [repeatType, setRepeatType] = useState<TaskData['repeat_type']>(task.repeat_type ?? 'none');
+
+  const isLocked = task.isUnlocked === false;
+  const isFocused = focusTaskId === task.id;
+  const isDimmed = focusTaskId !== null && !isFocused;
 
   const handleSave = () => {
     const d = Math.floor(new Date(`${deadline}T23:59:59`).getTime() / 1000);
-    onEdit(task.id, { title, importance, deadline: d });
+    onEdit(task.id, {
+      title,
+      importance,
+      deadline: d,
+      depends_on: dependsOn || null,
+      repeat_type: repeatType,
+    });
     onEndEdit();
   };
 
@@ -89,6 +115,24 @@ export function TaskItem({
           value={deadline}
           onChange={(e) => setDeadline(e.target.value)}
         />
+        <select value={dependsOn} onChange={(e) => setDependsOn(e.target.value)}>
+          <option value="">No dependency</option>
+          {tasks
+            .filter((candidate) => !candidate.completed && candidate.id !== task.id)
+            .map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {candidate.title}
+              </option>
+            ))}
+        </select>
+        <select
+          value={repeatType}
+          onChange={(e) => setRepeatType(e.target.value as TaskData['repeat_type'])}
+        >
+          <option value="none">No repeat</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+        </select>
         <div className="actions">
           <button onClick={handleSave}>Save</button>
           <button onClick={onEndEdit}>Cancel</button>
@@ -99,7 +143,7 @@ export function TaskItem({
 
   const urg = urgencyClass(task.deadline);
   return (
-    <li className={`task-item${urg ? ' ' + urg : ''}`}>
+    <li className={`task-item${urg ? ' ' + urg : ''}${isDimmed ? ' focus-dimmed' : ''}${isFocused ? ' focus-active' : ''}${isLocked ? ' task-locked' : ''}`}>
       <div className="task-item-header">
         <span className="title">{task.title}</span>
         <ImportancePips value={task.importance} />
@@ -108,8 +152,17 @@ export function TaskItem({
         DUE&nbsp;<span className="deadline-value">{formatDeadline(task.deadline)}</span>
         &nbsp;&nbsp;ETA&nbsp;<span className="deadline-value">{formatTimeRemaining(task.deadline)}</span>
       </span>
+      <span className="meta">
+        {isLocked ? 'CHAIN LOCKED' : 'CHAIN READY'}
+        {task.repeat_type !== 'none' ? `  //  REPEAT ${task.repeat_type.toUpperCase()}` : ''}
+      </span>
       <div className="actions">
-        <button onClick={onComplete}>&#9689; CONFIRM</button>
+        <button onClick={onComplete} disabled={isLocked}>&#9689; CONFIRM</button>
+        {isFocused ? (
+          <button onClick={onClearFocus}>UNFOCUS</button>
+        ) : (
+          <button onClick={onFocus}>FOCUS</button>
+        )}
         <button onClick={onStartEdit}>&#9998; EDIT</button>
         <button onClick={onDelete} className="delete">&#10005; DESTROY</button>
       </div>

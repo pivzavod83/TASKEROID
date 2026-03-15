@@ -6,6 +6,7 @@ import {
   setTasks,
   stopWallpaper,
   playTaskCompleteAnimation,
+  setFocusTask,
 } from './wallpaper-loop';
 
 declare const window: Window & {
@@ -27,6 +28,9 @@ interface TaskData {
   deadline: number;
   created_at: number;
   completed: boolean;
+  depends_on: string | null;
+  repeat_type: 'none' | 'daily' | 'weekly';
+  isUnlocked?: boolean;
 }
 
 function loadTasks(): void {
@@ -47,6 +51,12 @@ window.taskeroid?.onTasksUpdate?.((tasks) => {
 
 window.taskeroid?.onTaskCompleted?.((taskId) => {
   playTaskCompleteAnimation(taskId);
+});
+
+window.addEventListener('taskeroid-focus', (event) => {
+  const custom = event as CustomEvent<{ taskId?: string | null }>;
+  const taskId = custom.detail?.taskId ?? null;
+  setFocusTask(taskId);
 });
 
 window.addEventListener('beforeunload', stopWallpaper);

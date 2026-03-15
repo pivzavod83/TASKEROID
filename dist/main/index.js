@@ -11,6 +11,24 @@ const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const database_1 = require("../database/database");
 let mainWindow = null;
+function getRepeatIntervalSec(repeatType) {
+    if (repeatType === 'daily')
+        return 24 * 3600;
+    if (repeatType === 'weekly')
+        return 7 * 24 * 3600;
+    return 0;
+}
+function computeNextRepeatingDeadline(currentDeadline, repeatType) {
+    const step = getRepeatIntervalSec(repeatType);
+    if (!step)
+        return currentDeadline;
+    const now = Math.floor(Date.now() / 1000);
+    let next = currentDeadline;
+    while (next <= now) {
+        next += step;
+    }
+    return next;
+}
 function getIcon() {
     const iconPath = path_1.default.join(__dirname, '../../assets/icon.png');
     return fs_1.default.existsSync(iconPath) ? iconPath : undefined;
@@ -58,6 +76,8 @@ electron_1.ipcMain.handle('add-task', (_event, task) => {
         deadline: task.deadline,
         created_at: now,
         completed: task.completed ?? false,
+        depends_on: task.depends_on ?? null,
+        repeat_type: task.repeat_type ?? 'none',
     };
     (0, database_1.addTask)(full);
     broadcastTasksUpdate();
@@ -66,7 +86,17 @@ electron_1.ipcMain.handle('add-task', (_event, task) => {
 electron_1.ipcMain.handle('update-task', (_event, id, updates) => {
     const before = (0, database_1.getTaskById)(id);
     const becameCompleted = before && !before.completed && updates.completed === true;
-    (0, database_1.updateTask)(id, updates);
+    if (before && becameCompleted && before.repeat_type !== 'none') {
+        const nextDeadline = computeNextRepeatingDeadline(before.deadline, before.repeat_type);
+        (0, database_1.updateTask)(id, {
+            ...updates,
+            deadline: nextDeadline,
+            completed: false,
+        });
+    }
+    else {
+        (0, database_1.updateTask)(id, updates);
+    }
     if (becameCompleted) {
         mainWindow?.webContents.send('task-completed', id);
     }

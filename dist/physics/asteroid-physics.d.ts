@@ -11,7 +11,7 @@
 import { Task } from '../models/task';
 export declare const MAX_TIME_WINDOW_SEC: number;
 export declare const DISTANCE_DECAY_SEC: number;
-export declare const MIN_RADIUS = 1.8;
+export declare const MIN_RADIUS = 2.35;
 export declare const MAX_RADIUS = 12;
 export declare const MIN_ASTEROID_SIZE = 0.2;
 export declare const MAX_ASTEROID_SIZE = 0.9;
