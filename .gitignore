@@ -4,3 +4,5 @@ dist/
 .npmrc
 *.log
 npm-debug.log*
+release/
+build/icon.ico
