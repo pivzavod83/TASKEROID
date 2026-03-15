@@ -89,6 +89,7 @@ function createExplosionTexture(): THREE.CanvasTexture {
 
 function removeAsteroidImmediately(taskId: string, asteroid: AsteroidMesh): void {
   scene.remove(asteroid.mesh);
+  scene.remove(asteroid.flame);
   scene.remove(asteroid.routeLine);
   disposeAsteroidMesh(asteroid);
   asteroids.delete(taskId);
@@ -252,6 +253,7 @@ export function playTaskCompleteAnimation(taskId: string): void {
     hideTooltip();
   }
 
+  asteroid.flame.visible = false;
   asteroid.routeLine.visible = false;
 
   const effect = createCompletionEffect(taskId, asteroid);
@@ -558,6 +560,7 @@ export function setTasks(tasks: Task[]): void {
       (asteroid.mesh.userData as { task?: Task }).task = task;
       setAsteroidTargetAngle(asteroid, targetAngle);
       scene.add(asteroid.mesh);
+      scene.add(asteroid.flame);
       scene.add(asteroid.routeLine);
       asteroids.set(task.id, asteroid);
     }

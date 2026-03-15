@@ -20859,6 +20859,84 @@
     line.computeLineDistances();
     return line;
   }
+  function createFlameTexture(seed, intensity) {
+    const canvas2 = document.createElement("canvas");
+    canvas2.width = 320;
+    canvas2.height = 160;
+    const ctx = canvas2.getContext("2d");
+    const rand = rng(seed + 9100);
+    const headX = 72;
+    const headY = 80;
+    const halo = ctx.createRadialGradient(headX, headY, 0, headX, headY, 86);
+    halo.addColorStop(0, `rgba(255, 242, 184, ${0.68 * intensity})`);
+    halo.addColorStop(0.35, `rgba(255, 172, 62, ${0.33 * intensity})`);
+    halo.addColorStop(0.8, `rgba(255, 86, 22, ${0.08 * intensity})`);
+    halo.addColorStop(1, "rgba(255, 86, 22, 0)");
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(headX, headY, 86, 0, Math.PI * 2);
+    ctx.fill();
+    const outer = new Path2D();
+    outer.moveTo(28, 80);
+    outer.bezierCurveTo(26, 60, 44, 42, 74, 36);
+    outer.bezierCurveTo(120, 28, 184, 38, 244, 50);
+    outer.bezierCurveTo(280, 56, 302, 70, 300, 80);
+    outer.bezierCurveTo(298, 92, 278, 104, 238, 112);
+    outer.bezierCurveTo(178, 124, 118, 134, 72, 126);
+    outer.bezierCurveTo(44, 122, 26, 102, 28, 80);
+    outer.closePath();
+    const outerGrad = ctx.createLinearGradient(24, 80, 304, 80);
+    outerGrad.addColorStop(0, "#fff8d0");
+    outerGrad.addColorStop(0.16, "#ffd25f");
+    outerGrad.addColorStop(0.45, "#ff8f27");
+    outerGrad.addColorStop(0.82, "#ff4e11");
+    outerGrad.addColorStop(1, "rgba(150, 18, 0, 0.35)");
+    ctx.fillStyle = outerGrad;
+    ctx.fill(outer);
+    const core = new Path2D();
+    core.moveTo(40, 80);
+    core.bezierCurveTo(46, 64, 66, 56, 98, 56);
+    core.bezierCurveTo(144, 56, 194, 64, 234, 72);
+    core.bezierCurveTo(250, 76, 260, 78, 260, 80);
+    core.bezierCurveTo(260, 82, 250, 84, 234, 88);
+    core.bezierCurveTo(194, 96, 144, 104, 98, 104);
+    core.bezierCurveTo(66, 104, 46, 96, 40, 80);
+    core.closePath();
+    const coreGrad = ctx.createLinearGradient(40, 80, 264, 80);
+    coreGrad.addColorStop(0, "#ffffec");
+    coreGrad.addColorStop(0.24, "#ffe77d");
+    coreGrad.addColorStop(0.62, "#ffb238");
+    coreGrad.addColorStop(1, "rgba(255, 111, 25, 0.15)");
+    ctx.fillStyle = coreGrad;
+    ctx.fill(core);
+    ctx.globalCompositeOperation = "screen";
+    for (let i = 0; i < 16; i++) {
+      const y = 52 + rand() * 56;
+      const x0 = 92 + rand() * 30;
+      const x1 = 210 + rand() * 90;
+      const wobble = (rand() - 0.5) * 18;
+      ctx.strokeStyle = `rgba(255, ${170 + Math.floor(rand() * 50)}, ${34 + Math.floor(rand() * 24)}, ${0.12 + rand() * 0.18})`;
+      ctx.lineWidth = 1.2 + rand() * 2.4;
+      ctx.beginPath();
+      ctx.moveTo(x0, y);
+      ctx.quadraticCurveTo((x0 + x1) * 0.5, y + wobble, x1, y + wobble * 0.5);
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = "source-over";
+    for (let i = 0; i < 70; i++) {
+      const t = rand();
+      const x = 98 + t * 210 + rand() * 18;
+      const y = 80 + (rand() - 0.5) * (24 + t * 36);
+      const r = 0.5 + rand() * 1.6;
+      ctx.fillStyle = `rgba(255, ${110 + Math.floor(rand() * 80)}, ${20 + Math.floor(rand() * 24)}, ${0.06 + (1 - t) * 0.18})`;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const tex = new CanvasTexture(canvas2);
+    tex.needsUpdate = true;
+    return tex;
+  }
   function lerpAngle(current, target, alpha) {
     let diff = (target - current + Math.PI) % (Math.PI * 2);
     if (diff < 0)
@@ -20880,13 +20958,24 @@
       depthWrite: false,
       color: 16777215
     });
+    const flameMaterial = new SpriteMaterial({
+      map: createFlameTexture(seed, 0.95),
+      transparent: true,
+      depthWrite: false,
+      color: 16777215,
+      opacity: 0.62
+    });
     const mesh = new Sprite(material);
+    const flame = new Sprite(flameMaterial);
     const routeLine = createRouteLine();
     mesh.userData = { taskId: task.id, task };
     const baseScale = size * 2.35;
     mesh.scale.setScalar(baseScale);
+    flame.center.set(0.2, 0.5);
     const baseAngle = taskIndex / Math.max(1, totalTasks) * Math.PI * 2;
     const angleOffset = (Math.random() - 0.5) * 0.4;
+    const flamePhase = Math.random() * Math.PI * 2;
+    const flameFlickerSpeed = 0.7 + Math.random() * 0.35;
     const routePhase = Math.random() * Math.PI * 2;
     const routeSpeed = 0.55 + Math.random() * 0.24;
     const nowSec = Date.now() / 1e3;
@@ -20894,6 +20983,7 @@
     return {
       taskId: task.id,
       mesh,
+      flame,
       routeLine,
       baseAngle,
       targetAngle: baseAngle,
@@ -20901,6 +20991,8 @@
       baseScale,
       currentScale: baseScale,
       currentDistance: initialDistance,
+      flamePhase,
+      flameFlickerSpeed,
       routePhase,
       routeSpeed
     };
@@ -20919,9 +21011,12 @@
   }
   function disposeAsteroidMesh(asteroid) {
     const material = asteroid.mesh.material;
+    const flameMaterial = asteroid.flame.material;
     const routeMaterial = asteroid.routeLine.material;
     material.map?.dispose();
     material.dispose();
+    flameMaterial.map?.dispose();
+    flameMaterial.dispose();
     asteroid.routeLine.geometry.dispose();
     routeMaterial.dispose();
   }
@@ -20953,13 +21048,33 @@
       Math.min(1, deltaSec * 10)
     );
     asteroid.mesh.scale.set(asteroid.currentScale, asteroid.currentScale, 1);
+    const distanceToPlanet = Math.sqrt(x * x + y * y);
+    const dirToPlanetX = distanceToPlanet > 1e-4 ? -x / distanceToPlanet : 0;
+    const dirToPlanetY = distanceToPlanet > 1e-4 ? -y / distanceToPlanet : 0;
+    const awayX = -dirToPlanetX;
+    const awayY = -dirToPlanetY;
+    const flamePulse = 1 + Math.sin(currentTime * asteroid.flameFlickerSpeed + asteroid.flamePhase) * 0.08;
+    const flameDrift = Math.sin(currentTime * (asteroid.flameFlickerSpeed * 0.7) + asteroid.flamePhase) * 0.03;
+    const headOffset = asteroid.currentScale * 0.18;
+    asteroid.flame.position.set(
+      x + awayX * (headOffset + flameDrift),
+      y + awayY * (headOffset + flameDrift),
+      -0.09
+    );
+    asteroid.flame.scale.set(
+      asteroid.currentScale * 2.15 * flamePulse,
+      asteroid.currentScale * 0.95 * flamePulse,
+      1
+    );
+    const flameMaterial = asteroid.flame.material;
+    flameMaterial.rotation = Math.atan2(awayY, awayX);
+    flameMaterial.opacity = 0.48 + Math.sin(currentTime * (asteroid.flameFlickerSpeed * 0.9) + asteroid.flamePhase) * 0.08;
     const routeGeo = asteroid.routeLine.geometry;
     const routeMat = asteroid.routeLine.material;
     const routePositions = routeGeo.attributes.position;
     const pointCount = routePositions.count;
-    const distanceToPlanet = Math.sqrt(x * x + y * y);
-    const dirX = distanceToPlanet > 1e-4 ? -x / distanceToPlanet : 0;
-    const dirY = distanceToPlanet > 1e-4 ? -y / distanceToPlanet : 0;
+    const dirX = dirToPlanetX;
+    const dirY = dirToPlanetY;
     const normalX = -dirY;
     const normalY = dirX;
     const baseWaveAmp = Math.min(0.22, distanceToPlanet * 0.05);
@@ -21025,6 +21140,7 @@
   }
   function removeAsteroidImmediately(taskId, asteroid) {
     scene.remove(asteroid.mesh);
+    scene.remove(asteroid.flame);
     scene.remove(asteroid.routeLine);
     disposeAsteroidMesh(asteroid);
     asteroids.delete(taskId);
@@ -21170,6 +21286,7 @@
       hoveredAsteroid = null;
       hideTooltip();
     }
+    asteroid.flame.visible = false;
     asteroid.routeLine.visible = false;
     const effect = createCompletionEffect(taskId, asteroid);
     completionEffects.set(taskId, effect);
@@ -21441,6 +21558,7 @@
         asteroid.mesh.userData.task = task;
         setAsteroidTargetAngle(asteroid, targetAngle);
         scene.add(asteroid.mesh);
+        scene.add(asteroid.flame);
         scene.add(asteroid.routeLine);
         asteroids.set(task.id, asteroid);
       }
