@@ -11,7 +11,8 @@
 
 import { Task } from '../models/task';
 
-export const MAX_TIME_WINDOW_SEC = 30 * 24 * 3600; // 30 days in seconds
+export const MAX_TIME_WINDOW_SEC = 30 * 24 * 3600; // 30 days reference window
+export const DISTANCE_DECAY_SEC = 10 * 24 * 3600; // 10 days: month-away tasks sit near outer ring
 export const MIN_RADIUS = 1.8; // Just outside planet surface
 export const MAX_RADIUS = 12; // Near screen boundary (responsive in renderer)
 export const MIN_ASTEROID_SIZE = 0.2;
@@ -37,7 +38,8 @@ export function getAsteroidDistance(
   maxRadius: number = MAX_RADIUS
 ): number {
   const timeRemaining = Math.max(0, task.deadline - currentTime);
-  const progress = Math.min(1, timeRemaining / MAX_TIME_WINDOW_SEC);
+  // Monotonic mapping: more time left => farther, always bounded inside maxRadius.
+  const progress = 1 - Math.exp(-timeRemaining / DISTANCE_DECAY_SEC);
   return MIN_RADIUS + progress * (maxRadius - MIN_RADIUS);
 }
 

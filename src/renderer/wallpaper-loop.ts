@@ -12,6 +12,7 @@ import {
   updateStarBackground,
   getResponsiveMaxRadius,
   updateAsteroidForImportance,
+  setAsteroidTargetAngle,
   AsteroidMesh,
   StarBackground,
 } from './wallpaper-scene';
@@ -47,6 +48,13 @@ let planetScaleCurrent = 1;
 
 const HOVER_SCALE = 1.12;
 const PLANET_SCALE_LERP = 10;
+
+function getCanvasViewportSize(canvas: HTMLCanvasElement): { width: number; height: number } {
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(1, Math.floor(rect.width || window.innerWidth));
+  const height = Math.max(1, Math.floor(rect.height || window.innerHeight));
+  return { width, height };
+}
 
 function createTooltip(): HTMLDivElement {
   const el = document.createElement('div');
@@ -84,8 +92,7 @@ function showTooltip(x: number, y: number, task: Task): void {
   tooltipEl.innerHTML = `
       <strong style="color:#00e5d4">${escapeHtml(task.title)}</strong><br>
       <span style="color:#3a6070">DUE&nbsp;</span><span style="color:#b8d8e4">${escapeHtml(deadlineFmt)}</span><br>
-      <span style="color:#3a6070">ETA&nbsp;</span><span style="color:${secLeft < 0 ? '#ff3247' : secLeft < 21600 ? '#ff3247' : secLeft < 86400 ? '#ffb300' : '#00d68f'}">${etaStr}</span><br>
-      <span style="color:#3a6070">PRIORITY&nbsp;</span><span style="color:#ffb300">${task.importance}/5</span>
+      <span style="color:#3a6070">ETA&nbsp;</span><span style="color:${secLeft < 0 ? '#ff3247' : secLeft < 21600 ? '#ff3247' : secLeft < 86400 ? '#ffb300' : '#00d68f'}">${etaStr}</span>
   `;
   const offset = 14;
   let left = x + offset;
@@ -175,8 +182,11 @@ function openAsteroidEdit(task: Task): void {
 function onMouseMove(event: MouseEvent): void {
   mouseClientX = event.clientX;
   mouseClientY = event.clientY;
-  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+  const rect = renderer.domElement.getBoundingClientRect();
+  const localX = event.clientX - rect.left;
+  const localY = event.clientY - rect.top;
+  mouse.x = (localX / Math.max(1, rect.width)) * 2 - 1;
+  mouse.y = -(localY / Math.max(1, rect.height)) * 2 + 1;
 }
 
 function updateHoverAndTooltip(): void {
@@ -238,12 +248,13 @@ export function initWallpaper(canvas: HTMLCanvasElement, onCollision?: (taskId: 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0a0a12);
 
-  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+  const initialSize = getCanvasViewportSize(canvas);
+  camera = new THREE.PerspectiveCamera(60, initialSize.width / initialSize.height, 0.1, 100);
   camera.position.set(0, 0, 15);
   camera.lookAt(0, 0, 0);
 
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(initialSize.width, initialSize.height, false);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
   raycaster = new THREE.Raycaster();
@@ -300,9 +311,10 @@ export function initWallpaper(canvas: HTMLCanvasElement, onCollision?: (taskId: 
 
 function onResize(): void {
   if (!camera || !renderer) return;
-  camera.aspect = window.innerWidth / window.innerHeight;
+  const size = getCanvasViewportSize(renderer.domElement);
+  camera.aspect = size.width / size.height;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(size.width, size.height, false);
 }
 
 export function setTasks(tasks: Task[]): void {
@@ -318,20 +330,26 @@ export function setTasks(tasks: Task[]): void {
   });
 
   const now = Date.now() / 1000;
-  const activeTasks = tasks.filter((t) => !hasCollided(t, now));
+  const activeTasks = tasks
+    .filter((t) => !hasCollided(t, now))
+    .sort((a, b) => (a.deadline - b.deadline) || a.id.localeCompare(b.id));
   const totalTasks = activeTasks.length;
+  const angleStart = -Math.PI / 2;
 
   activeTasks.forEach((task, index) => {
+    const targetAngle = angleStart + (index / Math.max(1, totalTasks)) * Math.PI * 2;
     if (asteroids.has(task.id)) {
       const a = asteroids.get(task.id)!;
       const prevTask = (a.mesh.userData as { task?: Task }).task;
       (a.mesh.userData as { task?: Task }).task = task;
+      setAsteroidTargetAngle(a, targetAngle);
       if (prevTask && prevTask.importance !== task.importance) {
         updateAsteroidForImportance(a, task);
       }
     } else {
       const asteroid = createAsteroidMesh(task, index, totalTasks);
       (asteroid.mesh.userData as { task?: Task }).task = task;
+      setAsteroidTargetAngle(asteroid, targetAngle);
       scene.add(asteroid.mesh);
       scene.add(asteroid.routeLine);
       asteroids.set(task.id, asteroid);

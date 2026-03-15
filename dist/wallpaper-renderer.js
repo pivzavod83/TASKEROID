@@ -20337,6 +20337,7 @@
 
   // src/physics/asteroid-physics.ts
   var MAX_TIME_WINDOW_SEC = 30 * 24 * 3600;
+  var DISTANCE_DECAY_SEC = 10 * 24 * 3600;
   var MIN_RADIUS = 1.8;
   var MAX_RADIUS = 12;
   var MIN_ASTEROID_SIZE = 0.2;
@@ -20347,7 +20348,7 @@
   }
   function getAsteroidDistance(task, currentTime, maxRadius = MAX_RADIUS) {
     const timeRemaining = Math.max(0, task.deadline - currentTime);
-    const progress = Math.min(1, timeRemaining / MAX_TIME_WINDOW_SEC);
+    const progress = 1 - Math.exp(-timeRemaining / DISTANCE_DECAY_SEC);
     return MIN_RADIUS + progress * (maxRadius - MIN_RADIUS);
   }
   function hasCollided(task, currentTime) {
@@ -20552,7 +20553,7 @@
     const h = 2 * Math.tan(vFOV / 2) * Math.abs(camera2.position.z);
     const w = h * camera2.aspect;
     const minDim = Math.min(w, h);
-    return Math.min(MAX_RADIUS, minDim * 0.4);
+    return Math.min(MAX_RADIUS, minDim * 0.46);
   }
   function rng(seed) {
     let s = seed;
@@ -20832,6 +20833,16 @@
     line.computeLineDistances();
     return line;
   }
+  function lerpAngle(current, target, alpha) {
+    let diff = (target - current + Math.PI) % (Math.PI * 2);
+    if (diff < 0)
+      diff += Math.PI * 2;
+    diff -= Math.PI;
+    return current + diff * alpha;
+  }
+  function setAsteroidTargetAngle(asteroid, targetAngle) {
+    asteroid.targetAngle = targetAngle;
+  }
   function createAsteroidMesh(task, taskIndex, totalTasks) {
     const size = importanceToSize(task.importance);
     const seed = taskIndex * 1e3 + task.deadline;
@@ -20852,14 +20863,18 @@
     const angleOffset = (Math.random() - 0.5) * 0.4;
     const routePhase = Math.random() * Math.PI * 2;
     const routeSpeed = 0.55 + Math.random() * 0.24;
+    const nowSec = Date.now() / 1e3;
+    const initialDistance = getAsteroidDistance(task, nowSec, MAX_RADIUS);
     return {
       taskId: task.id,
       mesh,
       routeLine,
       baseAngle,
+      targetAngle: baseAngle,
       angleOffset,
       baseScale,
       currentScale: baseScale,
+      currentDistance: initialDistance,
       routePhase,
       routeSpeed
     };
@@ -20885,7 +20900,21 @@
     routeMaterial.dispose();
   }
   function updateAsteroidPosition(asteroid, task, currentTime, maxRadius, deltaSec, isHovered) {
-    const distance = getAsteroidDistance(task, currentTime, maxRadius);
+    const targetDistance = getAsteroidDistance(task, currentTime, maxRadius);
+    if (!Number.isFinite(asteroid.currentDistance) || asteroid.currentDistance <= 0) {
+      asteroid.currentDistance = targetDistance;
+    }
+    asteroid.currentDistance = MathUtils.lerp(
+      asteroid.currentDistance,
+      targetDistance,
+      Math.min(1, deltaSec * 4.2)
+    );
+    asteroid.baseAngle = lerpAngle(
+      asteroid.baseAngle,
+      asteroid.targetAngle,
+      Math.min(1, deltaSec * 2.6)
+    );
+    const distance = asteroid.currentDistance;
     const angle = asteroid.baseAngle + asteroid.angleOffset;
     const x = Math.cos(angle) * distance;
     const y = Math.sin(angle) * distance;
@@ -20946,6 +20975,12 @@
   var planetScaleCurrent = 1;
   var HOVER_SCALE = 1.12;
   var PLANET_SCALE_LERP = 10;
+  function getCanvasViewportSize(canvas2) {
+    const rect = canvas2.getBoundingClientRect();
+    const width = Math.max(1, Math.floor(rect.width || window.innerWidth));
+    const height = Math.max(1, Math.floor(rect.height || window.innerHeight));
+    return { width, height };
+  }
   function createTooltip() {
     const el = document.createElement("div");
     el.id = "asteroid-tooltip";
@@ -20980,8 +21015,7 @@
     tooltipEl.innerHTML = `
       <strong style="color:#00e5d4">${escapeHtml(task.title)}</strong><br>
       <span style="color:#3a6070">DUE&nbsp;</span><span style="color:#b8d8e4">${escapeHtml(deadlineFmt)}</span><br>
-      <span style="color:#3a6070">ETA&nbsp;</span><span style="color:${secLeft < 0 ? "#ff3247" : secLeft < 21600 ? "#ff3247" : secLeft < 86400 ? "#ffb300" : "#00d68f"}">${etaStr}</span><br>
-      <span style="color:#3a6070">PRIORITY&nbsp;</span><span style="color:#ffb300">${task.importance}/5</span>
+      <span style="color:#3a6070">ETA&nbsp;</span><span style="color:${secLeft < 0 ? "#ff3247" : secLeft < 21600 ? "#ff3247" : secLeft < 86400 ? "#ffb300" : "#00d68f"}">${etaStr}</span>
   `;
     const offset = 14;
     let left = x + offset;
@@ -21067,8 +21101,11 @@
   function onMouseMove(event) {
     mouseClientX = event.clientX;
     mouseClientY = event.clientY;
-    mouse.x = event.clientX / window.innerWidth * 2 - 1;
-    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    const rect = renderer.domElement.getBoundingClientRect();
+    const localX = event.clientX - rect.left;
+    const localY = event.clientY - rect.top;
+    mouse.x = localX / Math.max(1, rect.width) * 2 - 1;
+    mouse.y = -(localY / Math.max(1, rect.height)) * 2 + 1;
   }
   function updateHoverAndTooltip() {
     raycaster.setFromCamera(mouse, camera);
@@ -21118,11 +21155,12 @@
   function initWallpaper(canvas2, onCollision) {
     scene = new Scene();
     scene.background = new Color(657938);
-    camera = new PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+    const initialSize = getCanvasViewportSize(canvas2);
+    camera = new PerspectiveCamera(60, initialSize.width / initialSize.height, 0.1, 100);
     camera.position.set(0, 0, 15);
     camera.lookAt(0, 0, 0);
     renderer = new WebGLRenderer({ canvas: canvas2, antialias: true, alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(initialSize.width, initialSize.height, false);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     raycaster = new Raycaster();
     mouse = new Vector2(2, 2);
@@ -21171,9 +21209,10 @@
   function onResize() {
     if (!camera || !renderer)
       return;
-    camera.aspect = window.innerWidth / window.innerHeight;
+    const size = getCanvasViewportSize(renderer.domElement);
+    camera.aspect = size.width / size.height;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(size.width, size.height, false);
   }
   function setTasks(tasks) {
     const ids = new Set(tasks.map((t) => t.id));
@@ -21186,19 +21225,23 @@
       }
     });
     const now = Date.now() / 1e3;
-    const activeTasks = tasks.filter((t) => !hasCollided(t, now));
+    const activeTasks = tasks.filter((t) => !hasCollided(t, now)).sort((a, b) => a.deadline - b.deadline || a.id.localeCompare(b.id));
     const totalTasks = activeTasks.length;
+    const angleStart = -Math.PI / 2;
     activeTasks.forEach((task, index) => {
+      const targetAngle = angleStart + index / Math.max(1, totalTasks) * Math.PI * 2;
       if (asteroids.has(task.id)) {
         const a = asteroids.get(task.id);
         const prevTask = a.mesh.userData.task;
         a.mesh.userData.task = task;
+        setAsteroidTargetAngle(a, targetAngle);
         if (prevTask && prevTask.importance !== task.importance) {
           updateAsteroidForImportance(a, task);
         }
       } else {
         const asteroid = createAsteroidMesh(task, index, totalTasks);
         asteroid.mesh.userData.task = task;
+        setAsteroidTargetAngle(asteroid, targetAngle);
         scene.add(asteroid.mesh);
         scene.add(asteroid.routeLine);
         asteroids.set(task.id, asteroid);

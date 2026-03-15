@@ -10,11 +10,12 @@
  * - distance = minRadius + progress * (maxRadius - minRadius)
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MAX_ASTEROID_SIZE = exports.MIN_ASTEROID_SIZE = exports.MAX_RADIUS = exports.MIN_RADIUS = exports.MAX_TIME_WINDOW_SEC = void 0;
+exports.MAX_ASTEROID_SIZE = exports.MIN_ASTEROID_SIZE = exports.MAX_RADIUS = exports.MIN_RADIUS = exports.DISTANCE_DECAY_SEC = exports.MAX_TIME_WINDOW_SEC = void 0;
 exports.importanceToSize = importanceToSize;
 exports.getAsteroidDistance = getAsteroidDistance;
 exports.hasCollided = hasCollided;
-exports.MAX_TIME_WINDOW_SEC = 30 * 24 * 3600; // 30 days in seconds
+exports.MAX_TIME_WINDOW_SEC = 30 * 24 * 3600; // 30 days reference window
+exports.DISTANCE_DECAY_SEC = 10 * 24 * 3600; // 10 days: month-away tasks sit near outer ring
 exports.MIN_RADIUS = 1.8; // Just outside planet surface
 exports.MAX_RADIUS = 12; // Near screen boundary (responsive in renderer)
 exports.MIN_ASTEROID_SIZE = 0.2;
@@ -34,7 +35,8 @@ function importanceToSize(importance) {
  */
 function getAsteroidDistance(task, currentTime, maxRadius = exports.MAX_RADIUS) {
     const timeRemaining = Math.max(0, task.deadline - currentTime);
-    const progress = Math.min(1, timeRemaining / exports.MAX_TIME_WINDOW_SEC);
+    // Monotonic mapping: more time left => farther, always bounded inside maxRadius.
+    const progress = 1 - Math.exp(-timeRemaining / exports.DISTANCE_DECAY_SEC);
     return exports.MIN_RADIUS + progress * (maxRadius - exports.MIN_RADIUS);
 }
 /**

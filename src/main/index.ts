@@ -1,7 +1,7 @@
 /**
  * Electron main process - Taskeroid app
  */
-import { app, BrowserWindow, ipcMain, nativeImage } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import {
@@ -29,7 +29,9 @@ function createMainWindow(): void {
     minWidth: 640,
     minHeight: 480,
     show: false,
-    frame: true,
+    frame: false,
+    titleBarStyle: 'hidden',
+    autoHideMenuBar: true,
     resizable: true,
     ...(getIcon() ? { icon: getIcon() } : {}),
     webPreferences: {
@@ -43,6 +45,7 @@ function createMainWindow(): void {
   mainWindow.loadFile(indexPath);
 
   mainWindow.once('ready-to-show', () => {
+    mainWindow?.maximize();
     mainWindow?.show();
   });
 
@@ -88,7 +91,31 @@ ipcMain.on('asteroid-collision', (_e, taskId: string) => {
   broadcastTasksUpdate();
 });
 
+ipcMain.handle('window-control', (event, action: 'minimize' | 'toggle-maximize' | 'close') => {
+  const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+  if (!win) return false;
+
+  if (action === 'minimize') {
+    win.minimize();
+    return win.isMaximized();
+  }
+  if (action === 'toggle-maximize') {
+    if (win.isMaximized()) {
+      win.unmaximize();
+    } else {
+      win.maximize();
+    }
+    return win.isMaximized();
+  }
+  if (action === 'close') {
+    win.close();
+  }
+
+  return win.isMaximized();
+});
+
 app.whenReady().then(async () => {
+  Menu.setApplicationMenu(null);
   await initDatabase();
   if (process.argv.includes('--demo')) {
     resetAndSeedDemo();

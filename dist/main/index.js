@@ -22,7 +22,9 @@ function createMainWindow() {
         minWidth: 640,
         minHeight: 480,
         show: false,
-        frame: true,
+        frame: false,
+        titleBarStyle: 'hidden',
+        autoHideMenuBar: true,
         resizable: true,
         ...(getIcon() ? { icon: getIcon() } : {}),
         webPreferences: {
@@ -34,6 +36,7 @@ function createMainWindow() {
     const indexPath = path_1.default.join(__dirname, '../../index.html');
     mainWindow.loadFile(indexPath);
     mainWindow.once('ready-to-show', () => {
+        mainWindow?.maximize();
         mainWindow?.show();
     });
     mainWindow.on('closed', () => {
@@ -71,7 +74,30 @@ electron_1.ipcMain.handle('delete-task', (_event, id) => {
 electron_1.ipcMain.on('asteroid-collision', (_e, taskId) => {
     broadcastTasksUpdate();
 });
+electron_1.ipcMain.handle('window-control', (event, action) => {
+    const win = electron_1.BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+    if (!win)
+        return false;
+    if (action === 'minimize') {
+        win.minimize();
+        return win.isMaximized();
+    }
+    if (action === 'toggle-maximize') {
+        if (win.isMaximized()) {
+            win.unmaximize();
+        }
+        else {
+            win.maximize();
+        }
+        return win.isMaximized();
+    }
+    if (action === 'close') {
+        win.close();
+    }
+    return win.isMaximized();
+});
 electron_1.app.whenReady().then(async () => {
+    electron_1.Menu.setApplicationMenu(null);
     await (0, database_1.initDatabase)();
     if (process.argv.includes('--demo')) {
         (0, database_1.resetAndSeedDemo)();

@@ -6,15 +6,70 @@
   <title>Taskeroid</title>
   <link rel="stylesheet" href="ui.css">
   <style>
+    :root {
+      --titlebar-h: 34px;
+    }
     body {
       padding: 0; margin: 0;
       min-height: 100vh;
       font-family: 'Consolas', 'Lucida Console', 'Courier New', monospace;
     }
     html, body { width: 100%; height: 100%; overflow: hidden; }
+    #app-titlebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--titlebar-h);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 8px 0 12px;
+      background: rgba(1, 7, 14, 0.92);
+      border-bottom: 1px solid rgba(0, 229, 212, 0.25);
+      z-index: 60;
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+    #app-titlebar .title {
+      color: #00e5d4;
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      text-shadow: 0 0 10px rgba(0, 229, 212, 0.35);
+    }
+    #app-titlebar .controls {
+      display: flex;
+      gap: 6px;
+      -webkit-app-region: no-drag;
+    }
+    #app-titlebar .tb-btn {
+      width: 32px;
+      height: 24px;
+      border: 1px solid rgba(0, 229, 212, 0.32);
+      background: rgba(0, 20, 32, 0.9);
+      color: #b8d8e4;
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+      font-family: 'Consolas', 'Lucida Console', 'Courier New', monospace;
+    }
+    #app-titlebar .tb-btn:hover {
+      background: rgba(0, 229, 212, 0.18);
+      color: #00e5d4;
+      border-color: rgba(0, 229, 212, 0.6);
+    }
+    #app-titlebar .tb-btn.close:hover {
+      background: rgba(255, 50, 71, 0.18);
+      color: #ff3247;
+      border-color: rgba(255, 50, 71, 0.7);
+    }
     #scene-container {
       position: fixed;
-      inset: 0;
+      top: var(--titlebar-h);
+      left: 0;
+      right: 0;
+      bottom: 0;
       z-index: 0;
     }
     #scene-container canvas {
@@ -23,8 +78,8 @@
       height: 100%;
     }
     #task-panel {
-      position: fixed; top: 0; right: 0;
-      width: 420px; max-width: 100%; height: 100%;
+      position: fixed; top: var(--titlebar-h); right: 0;
+      width: 420px; max-width: 100%; height: calc(100% - var(--titlebar-h));
       background: rgba(2, 8, 16, 0.97);
       z-index: 20; display: flex; flex-direction: column;
       box-shadow: -1px 0 0 0 rgba(0,229,212,0.25), -4px 0 0 0 rgba(0,229,212,0.05);
@@ -179,6 +234,14 @@
   </style>
 </head>
 <body>
+  <div id="app-titlebar">
+    <div class="title">Taskeroid</div>
+    <div class="controls">
+      <button id="tb-min" class="tb-btn" type="button" aria-label="Minimize">-</button>
+      <button id="tb-max" class="tb-btn" type="button" aria-label="Maximize">□</button>
+      <button id="tb-close" class="tb-btn close" type="button" aria-label="Close">×</button>
+    </div>
+  </div>
   <div id="scene-container">
     <canvas id="wallpaper-canvas"></canvas>
   </div>
@@ -201,6 +264,16 @@
       const closeBtn = document.getElementById('panel-close');
       if (closeBtn && panel) closeBtn.addEventListener('click', () => panel.classList.remove('open'));
       window.openTaskPanel = function() { panel?.classList.add('open'); };
+
+      const minBtn = document.getElementById('tb-min');
+      const maxBtn = document.getElementById('tb-max');
+      const quitBtn = document.getElementById('tb-close');
+      minBtn?.addEventListener('click', () => window.taskeroidWindow?.minimize?.());
+      maxBtn?.addEventListener('click', async () => {
+        const maximized = await window.taskeroidWindow?.toggleMaximize?.();
+        if (maxBtn) maxBtn.textContent = maximized ? '❐' : '□';
+      });
+      quitBtn?.addEventListener('click', () => window.taskeroidWindow?.close?.());
     })();
   </script>
 </body>

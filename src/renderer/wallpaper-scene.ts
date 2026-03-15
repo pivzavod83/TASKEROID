@@ -14,9 +14,11 @@ export interface AsteroidMesh {
   mesh: THREE.Sprite;
   routeLine: THREE.Line;
   baseAngle: number; // radians in XY plane
+  targetAngle: number;
   angleOffset: number; // small random offset
   baseScale: number;
   currentScale: number;
+  currentDistance: number;
   routePhase: number;
   routeSpeed: number;
 }
@@ -273,7 +275,7 @@ export function getResponsiveMaxRadius(camera: THREE.PerspectiveCamera): number 
   const h = 2 * Math.tan(vFOV / 2) * Math.abs(camera.position.z);
   const w = h * camera.aspect;
   const minDim = Math.min(w, h);
-  return Math.min(MAX_RADIUS, minDim * 0.4);
+  return Math.min(MAX_RADIUS, minDim * 0.46);
 }
 
 /**
@@ -589,6 +591,17 @@ function createRouteLine(): THREE.Line {
   return line;
 }
 
+function lerpAngle(current: number, target: number, alpha: number): number {
+  let diff = (target - current + Math.PI) % (Math.PI * 2);
+  if (diff < 0) diff += Math.PI * 2;
+  diff -= Math.PI;
+  return current + diff * alpha;
+}
+
+export function setAsteroidTargetAngle(asteroid: AsteroidMesh, targetAngle: number): void {
+  asteroid.targetAngle = targetAngle;
+}
+
 /**
  * Create asteroid - detailed rocky form with molten glowing pockets
  */
@@ -619,15 +632,19 @@ export function createAsteroidMesh(
   const angleOffset = (Math.random() - 0.5) * 0.4;
   const routePhase = Math.random() * Math.PI * 2;
   const routeSpeed = 0.55 + Math.random() * 0.24;
+  const nowSec = Date.now() / 1000;
+  const initialDistance = getAsteroidDistance(task, nowSec, MAX_RADIUS);
 
   return {
     taskId: task.id,
     mesh,
     routeLine,
     baseAngle,
+    targetAngle: baseAngle,
     angleOffset,
     baseScale,
     currentScale: baseScale,
+    currentDistance: initialDistance,
     routePhase,
     routeSpeed,
   };
@@ -671,7 +688,23 @@ export function updateAsteroidPosition(
   deltaSec: number,
   isHovered: boolean
 ): void {
-  const distance = getAsteroidDistance(task, currentTime, maxRadius);
+  const targetDistance = getAsteroidDistance(task, currentTime, maxRadius);
+  if (!Number.isFinite(asteroid.currentDistance) || asteroid.currentDistance <= 0) {
+    asteroid.currentDistance = targetDistance;
+  }
+  asteroid.currentDistance = THREE.MathUtils.lerp(
+    asteroid.currentDistance,
+    targetDistance,
+    Math.min(1, deltaSec * 4.2)
+  );
+
+  asteroid.baseAngle = lerpAngle(
+    asteroid.baseAngle,
+    asteroid.targetAngle,
+    Math.min(1, deltaSec * 2.6)
+  );
+
+  const distance = asteroid.currentDistance;
   const angle = asteroid.baseAngle + asteroid.angleOffset;
 
   const x = Math.cos(angle) * distance;
