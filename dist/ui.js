@@ -23565,8 +23565,33 @@
 
   // src/ui/TaskItem.tsx
   var import_react = __toESM(require_react());
+  function urgencyClass(deadline) {
+    const secLeft = deadline - Date.now() / 1e3;
+    if (secLeft < 0)
+      return "urgency-overdue";
+    if (secLeft < 3600 * 6)
+      return "urgency-critical";
+    if (secLeft < 3600 * 24)
+      return "urgency-warning";
+    return "";
+  }
   function formatDeadline(ts) {
-    return new Date(ts * 1e3).toLocaleString();
+    const d = new Date(ts * 1e3);
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yy = String(d.getFullYear()).slice(-2);
+    return `${dd}/${mm}/${yy}`;
+  }
+  function formatTimeRemaining(ts) {
+    const secLeft = ts - Date.now() / 1e3;
+    if (secLeft < 0)
+      return "OVERDUE";
+    const days = Math.floor(secLeft / 86400);
+    const hours = Math.floor(secLeft % 86400 / 3600);
+    return `T\u2212${String(days).padStart(2, "0")}D ${String(hours).padStart(2, "0")}H`;
+  }
+  function ImportancePips({ value }) {
+    return /* @__PURE__ */ import_react.default.createElement("div", { className: "importance-bar" }, [1, 2, 3, 4, 5].map((n) => /* @__PURE__ */ import_react.default.createElement("div", { key: n, className: `importance-pip${n <= value ? " active" : ""}` })));
   }
   function TaskItem({
     task,
@@ -23580,10 +23605,10 @@
     const [title, setTitle] = (0, import_react.useState)(task.title);
     const [importance, setImportance] = (0, import_react.useState)(task.importance);
     const [deadline, setDeadline] = (0, import_react.useState)(
-      new Date(task.deadline * 1e3).toISOString().slice(0, 16)
+      new Date(task.deadline * 1e3).toISOString().slice(0, 10)
     );
     const handleSave = () => {
-      const d = Math.floor(new Date(deadline).getTime() / 1e3);
+      const d = Math.floor((/* @__PURE__ */ new Date(`${deadline}T23:59:59`)).getTime() / 1e3);
       onEdit(task.id, { title, importance, deadline: d });
       onEndEdit();
     };
@@ -23607,13 +23632,14 @@
       ), /* @__PURE__ */ import_react.default.createElement(
         "input",
         {
-          type: "datetime-local",
+          type: "date",
           value: deadline,
           onChange: (e) => setDeadline(e.target.value)
         }
       ), /* @__PURE__ */ import_react.default.createElement("div", { className: "actions" }, /* @__PURE__ */ import_react.default.createElement("button", { onClick: handleSave }, "Save"), /* @__PURE__ */ import_react.default.createElement("button", { onClick: onEndEdit }, "Cancel")));
     }
-    return /* @__PURE__ */ import_react.default.createElement("li", { className: "task-item" }, /* @__PURE__ */ import_react.default.createElement("span", { className: "title" }, task.title), /* @__PURE__ */ import_react.default.createElement("span", { className: "meta" }, "Importance: ", task.importance, " \xB7 Due: ", formatDeadline(task.deadline)), /* @__PURE__ */ import_react.default.createElement("div", { className: "actions" }, /* @__PURE__ */ import_react.default.createElement("button", { onClick: onComplete }, "Complete"), /* @__PURE__ */ import_react.default.createElement("button", { onClick: onStartEdit }, "Edit"), /* @__PURE__ */ import_react.default.createElement("button", { onClick: onDelete, className: "delete" }, "Delete")));
+    const urg = urgencyClass(task.deadline);
+    return /* @__PURE__ */ import_react.default.createElement("li", { className: `task-item${urg ? " " + urg : ""}` }, /* @__PURE__ */ import_react.default.createElement("div", { className: "task-item-header" }, /* @__PURE__ */ import_react.default.createElement("span", { className: "title" }, task.title), /* @__PURE__ */ import_react.default.createElement(ImportancePips, { value: task.importance })), /* @__PURE__ */ import_react.default.createElement("span", { className: "meta" }, "DUE\xA0", /* @__PURE__ */ import_react.default.createElement("span", { className: "deadline-value" }, formatDeadline(task.deadline)), "\xA0\xA0ETA\xA0", /* @__PURE__ */ import_react.default.createElement("span", { className: "deadline-value" }, formatTimeRemaining(task.deadline))), /* @__PURE__ */ import_react.default.createElement("div", { className: "actions" }, /* @__PURE__ */ import_react.default.createElement("button", { onClick: onComplete }, "\u25D9 CONFIRM"), /* @__PURE__ */ import_react.default.createElement("button", { onClick: onStartEdit }, "\u270E EDIT"), /* @__PURE__ */ import_react.default.createElement("button", { onClick: onDelete, className: "delete" }, "\u2715 DESTROY")));
   }
 
   // src/ui/TaskList.tsx
@@ -23646,14 +23672,12 @@
     const [title, setTitle] = (0, import_react3.useState)("");
     const [importance, setImportance] = (0, import_react3.useState)(3);
     const [deadlineDate, setDeadlineDate] = (0, import_react3.useState)("");
-    const [deadlineTime, setDeadlineTime] = (0, import_react3.useState)("23:59");
     const handleSubmit = (e) => {
       e.preventDefault();
       if (!title.trim())
         return;
       const d = deadlineDate || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-      const t = deadlineTime || "23:59";
-      const deadline = Math.floor((/* @__PURE__ */ new Date(`${d}T${t}`)).getTime() / 1e3);
+      const deadline = Math.floor((/* @__PURE__ */ new Date(`${d}T23:59:59`)).getTime() / 1e3);
       onSubmit(title.trim(), importance, deadline);
       setTitle("");
       setImportance(3);
@@ -23668,11 +23692,11 @@
       "input",
       {
         type: "text",
-        placeholder: "Task title",
+        placeholder: "TARGET DESIGNATION",
         value: title,
         onChange: (e) => setTitle(e.target.value)
       }
-    ), /* @__PURE__ */ import_react3.default.createElement("div", { className: "form-row" }, /* @__PURE__ */ import_react3.default.createElement("label", null, "Importance (1\u20135)", /* @__PURE__ */ import_react3.default.createElement(
+    ), /* @__PURE__ */ import_react3.default.createElement("div", { className: "form-row" }, /* @__PURE__ */ import_react3.default.createElement("label", null, "// PRIORITY", /* @__PURE__ */ import_react3.default.createElement(
       "input",
       {
         type: "number",
@@ -23681,21 +23705,14 @@
         value: importance,
         onChange: (e) => setImportance(Number(e.target.value))
       }
-    )), /* @__PURE__ */ import_react3.default.createElement("label", null, "Deadline", /* @__PURE__ */ import_react3.default.createElement(
+    )), /* @__PURE__ */ import_react3.default.createElement("label", null, "// DATE", /* @__PURE__ */ import_react3.default.createElement(
       "input",
       {
         type: "date",
         value: deadlineDate || defaultDate,
         onChange: (e) => setDeadlineDate(e.target.value)
       }
-    )), /* @__PURE__ */ import_react3.default.createElement("label", null, "Time", /* @__PURE__ */ import_react3.default.createElement(
-      "input",
-      {
-        type: "time",
-        value: deadlineTime,
-        onChange: (e) => setDeadlineTime(e.target.value)
-      }
-    ))), /* @__PURE__ */ import_react3.default.createElement("button", { type: "submit" }, "Add Task"));
+    ))), /* @__PURE__ */ import_react3.default.createElement("button", { type: "submit" }, "\u25BA TRACK TARGET"));
   }
 
   // src/ui/App.tsx
@@ -23726,7 +23743,7 @@
     const handleEdit = async (id, updates) => {
       await window.taskeroidUI?.updateTask(id, updates);
     };
-    return /* @__PURE__ */ import_react4.default.createElement("div", { className: "app" }, /* @__PURE__ */ import_react4.default.createElement("header", null, /* @__PURE__ */ import_react4.default.createElement("h1", null, "Taskeroid"), /* @__PURE__ */ import_react4.default.createElement("p", null, "Tasks appear as asteroids approaching the planet")), /* @__PURE__ */ import_react4.default.createElement(TaskForm, { onSubmit: handleAdd }), /* @__PURE__ */ import_react4.default.createElement(
+    return /* @__PURE__ */ import_react4.default.createElement("div", { className: "app" }, /* @__PURE__ */ import_react4.default.createElement("header", null, /* @__PURE__ */ import_react4.default.createElement("div", { className: "hud-bar" }, /* @__PURE__ */ import_react4.default.createElement("span", { className: "hud-logo" }, "TASKEROID"), /* @__PURE__ */ import_react4.default.createElement("span", { className: "hud-status" }, /* @__PURE__ */ import_react4.default.createElement("span", { className: "hud-status-dot" }), "SYS ONLINE")), /* @__PURE__ */ import_react4.default.createElement("p", null, "ORBITAL THREAT MONITOR // ASTEROID TRACKING SYSTEM")), /* @__PURE__ */ import_react4.default.createElement(TaskForm, { onSubmit: handleAdd }), /* @__PURE__ */ import_react4.default.createElement(
       TaskList,
       {
         tasks,

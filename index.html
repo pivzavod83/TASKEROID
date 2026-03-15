@@ -2,12 +2,15 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'">
   <title>Taskeroid</title>
   <link rel="stylesheet" href="ui.css">
   <style>
-    * { margin: 0; padding: 0; }
-    body { padding: 0; min-height: 100vh; }
+    body {
+      padding: 0; margin: 0;
+      min-height: 100vh;
+      font-family: 'Consolas', 'Lucida Console', 'Courier New', monospace;
+    }
     html, body { width: 100%; height: 100%; overflow: hidden; }
     #scene-container {
       position: fixed;
@@ -20,20 +23,15 @@
       height: 100%;
     }
     #task-panel {
-      position: fixed;
-      top: 0;
-      right: 0;
-      width: 420px;
-      max-width: 100%;
-      height: 100%;
-      background: rgba(15, 20, 25, 0.97);
-      z-index: 20;
-      display: flex;
-      flex-direction: column;
-      box-shadow: -4px 0 24px rgba(0,0,0,0.4);
+      position: fixed; top: 0; right: 0;
+      width: 420px; max-width: 100%; height: 100%;
+      background: rgba(2, 8, 16, 0.97);
+      z-index: 20; display: flex; flex-direction: column;
+      box-shadow: -1px 0 0 0 rgba(0,229,212,0.25), -4px 0 0 0 rgba(0,229,212,0.05);
       transform: translateX(100%);
-      transition: transform 0.25s ease;
+      transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
       overflow: auto;
+      border-left: 2px solid rgba(0, 229, 212, 0.35);
     }
     #task-panel.open {
       transform: translateX(0);
@@ -43,24 +41,31 @@
       justify-content: space-between;
       align-items: center;
       padding: 16px 20px;
-      border-bottom: 1px solid #30363d;
+      border-bottom: 1px solid rgba(0, 229, 212, 0.2);
       flex-shrink: 0;
+      background: rgba(0, 12, 22, 0.98);
     }
     #task-panel .panel-header h2 {
-      font-size: 1.25rem;
-      color: #58a6ff;
+      font-size: 0.86rem;
+      color: #00e5d4;
+      text-shadow: 0 0 12px rgba(0, 229, 212, 0.4);
+      letter-spacing: 3px;
+      text-transform: uppercase;
     }
     #task-panel .panel-close {
       background: transparent;
-      border: none;
-      color: #8b949e;
-      font-size: 24px;
+      border: 1px solid rgba(0, 229, 212, 0.3);
+      color: rgba(0, 229, 212, 0.7);
+      font-size: 16px;
       cursor: pointer;
-      padding: 0 8px;
+      padding: 4px 8px;
       line-height: 1;
+      font-family: 'Consolas', 'Lucida Console', 'Courier New', monospace;
     }
     #task-panel .panel-close:hover {
-      color: #e6edf3;
+      background: rgba(0, 229, 212, 0.12);
+      border-color: rgba(0, 229, 212, 0.6);
+      color: #00e5d4;
     }
     #task-panel .panel-content {
       flex: 1;
@@ -75,40 +80,100 @@
       margin-bottom: 16px;
     }
     #task-panel header h1 {
-      font-size: 1.25rem;
+      font-size: 0.95rem;
     }
     #task-panel header p {
-      font-size: 0.8rem;
+      font-size: 0.72rem;
     }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     #asteroid-edit-popup {
       position: fixed;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
       z-index: 30;
-      background: #161b22;
-      border: 1px solid #30363d;
-      border-radius: 8px;
+      background: rgba(2, 8, 16, 0.98);
+      border: 1px solid rgba(0, 229, 212, 0.4);
+      border-left: 2px solid #00e5d4;
+      border-radius: 0;
       padding: 20px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-      min-width: 280px;
+      box-shadow: 0 0 48px rgba(0, 229, 212, 0.12), 0 0 0 1px rgba(0,229,212,0.06);
+      min-width: 300px;
       display: none;
-      font-family: system-ui, -apple-system, sans-serif;
+      font-family: 'Consolas', 'Lucida Console', 'Courier New', monospace;
     }
     #asteroid-edit-popup.open { display: block; }
-    #asteroid-edit-popup h3 { color: #58a6ff; margin-bottom: 16px; font-size: 1rem; }
-    #asteroid-edit-popup input { width: 100%; padding: 8px 10px; margin-bottom: 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 14px; }
-    #asteroid-edit-popup label { display: block; font-size: 0.8rem; color: #8b949e; margin-bottom: 4px; }
+    #asteroid-edit-popup h3 {
+      color: #00e5d4;
+      margin-bottom: 16px;
+      font-size: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      text-shadow: 0 0 10px rgba(0, 229, 212, 0.35);
+    }
+    #asteroid-edit-popup input {
+      width: 100%;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      background: #000c14;
+      border: 1px solid rgba(0, 229, 212, 0.2);
+      border-radius: 0;
+      color: #b8d8e4;
+      font-size: 15px;
+      font-family: 'Consolas', 'Lucida Console', 'Courier New', monospace;
+    }
+    #asteroid-edit-popup input:focus {
+      outline: none;
+      border-color: #00e5d4;
+      box-shadow: 0 0 0 1px rgba(0, 229, 212, 0.3);
+    }
+    #asteroid-edit-popup label {
+      display: block;
+      font-size: 0.7rem;
+      color: #3a6070;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
     #asteroid-edit-popup .form-group { margin-bottom: 12px; }
     #asteroid-edit-popup .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
-    #asteroid-edit-popup button { padding: 8px 14px; font-size: 13px; background: #21262d; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; cursor: pointer; }
-    #asteroid-edit-popup button:hover { background: #30363d; }
-    #asteroid-edit-popup button.primary { background: #238636; border-color: #238636; color: white; }
-    #asteroid-edit-popup button.primary:hover { background: #2ea043; }
-    #asteroid-edit-popup button.delete { color: #f85149; border-color: #f85149; }
-    #asteroid-edit-popup button.delete:hover { background: rgba(248,81,73,0.2); }
+    #asteroid-edit-popup button {
+      padding: 10px 14px;
+      font-size: 14px;
+      background: transparent;
+      border: 1px solid rgba(0, 229, 212, 0.3);
+      border-radius: 0;
+      color: #b8d8e4;
+      cursor: pointer;
+      font-family: 'Consolas', 'Lucida Console', 'Courier New', monospace;
+      text-transform: uppercase; letter-spacing: 0.1em;
+    }
+    #asteroid-edit-popup button:hover {
+      background: rgba(0, 229, 212, 0.1);
+      border-color: #00e5d4; color: #00e5d4;
+    }
+    #asteroid-edit-popup button.primary {
+      background: rgba(0, 229, 212, 0.1);
+      border-color: #00e5d4;
+      color: #00e5d4;
+    }
+    #asteroid-edit-popup button.primary:hover { background: rgba(0, 229, 212, 0.2); }
+    #asteroid-edit-popup button.delete {
+      color: rgba(255, 50, 71, 0.75);
+      border-color: rgba(255, 50, 71, 0.35);
+      background: transparent;
+    }
+    #asteroid-edit-popup button.delete:hover {
+      background: rgba(255, 50, 71, 0.1);
+      border-color: #ff3247; color: #ff3247;
+    }
     #asteroid-edit-backdrop {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 25; display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 6, 14, 0.75);
+      backdrop-filter: blur(2px);
+      z-index: 25;
+      display: none;
     }
     #asteroid-edit-backdrop.open { display: block; }
   </style>
@@ -121,7 +186,7 @@
   <div id="asteroid-edit-popup"></div>
   <div id="task-panel">
     <div class="panel-header">
-      <h2>Tasks</h2>
+      <h2>TRACKING LOG</h2>
       <button id="panel-close" class="panel-close" type="button">×</button>
     </div>
     <div class="panel-content">

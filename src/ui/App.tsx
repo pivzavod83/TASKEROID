@@ -51,8 +51,13 @@ export function App(): React.ReactElement {
   return (
     <div className="app">
       <header>
-        <h1>Taskeroid</h1>
-        <p>Tasks appear as asteroids approaching the planet</p>
+          <div className="hud-bar">
+            <span className="hud-logo">TASKEROID</span>
+            <span className="hud-status">
+              <span className="hud-status-dot"></span>SYS ONLINE
+            </span>
+          </div>
+          <p>ORBITAL THREAT MONITOR // ASTEROID TRACKING SYSTEM</p>
       </header>
       <TaskForm onSubmit={handleAdd} />
       <TaskList

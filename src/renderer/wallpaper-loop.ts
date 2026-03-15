@@ -6,10 +6,14 @@ import {
   createStarBackground,
   createPlanet,
   createAsteroidMesh,
+  disposeAsteroidMesh,
+  disposeStarBackground,
   updateAsteroidPosition,
+  updateStarBackground,
   getResponsiveMaxRadius,
   updateAsteroidForImportance,
   AsteroidMesh,
+  StarBackground,
 } from './wallpaper-scene';
 import { Task } from '../models/task';
 import { hasCollided } from '../physics/asteroid-physics';
@@ -26,6 +30,7 @@ let scene: THREE.Scene;
 let camera: THREE.PerspectiveCamera;
 let renderer: THREE.WebGLRenderer;
 let planet: THREE.Mesh;
+let starBackground: StarBackground;
 let asteroids: Map<string, AsteroidMesh> = new Map();
 let animationId: number;
 let lastTime = 0;
@@ -49,15 +54,17 @@ function createTooltip(): HTMLDivElement {
   el.style.cssText = `
     position: fixed;
     pointer-events: none;
-    background: rgba(15, 20, 25, 0.95);
-    color: #e6edf3;
+     background: rgba(2, 8, 16, 0.96);
+     color: #b8d8e4;
     padding: 8px 12px;
-    border-radius: 6px;
-    font-family: system-ui, -apple-system, sans-serif;
+     font-family: 'Consolas', 'Lucida Console', 'Courier New', monospace;
     font-size: 13px;
+     letter-spacing: 0.04em;
+     text-transform: uppercase;
     max-width: 240px;
-    border: 1px solid #30363d;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+     border: 1px solid rgba(0, 229, 212, 0.35);
+     border-left: 2px solid #00e5d4;
+     box-shadow: 0 0 24px rgba(0, 229, 212, 0.1);
     z-index: 9999;
     opacity: 0;
     transition: opacity 0.15s ease;
@@ -68,10 +75,17 @@ function createTooltip(): HTMLDivElement {
 
 function showTooltip(x: number, y: number, task: Task): void {
   if (!tooltipEl) tooltipEl = createTooltip();
-  const deadlineStr = new Date(task.deadline * 1000).toLocaleString();
+    const d = new Date(task.deadline * 1000);
+    const deadlineFmt = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getFullYear()).slice(-2)}`;
+    const secLeft = task.deadline - Date.now() / 1000;
+    const etaStr = secLeft < 0
+      ? 'OVERDUE'
+      : `T−${String(Math.floor(secLeft / 86400)).padStart(2, '0')}D ${String(Math.floor((secLeft % 86400) / 3600)).padStart(2, '0')}H`;
   tooltipEl.innerHTML = `
-    <strong>${escapeHtml(task.title)}</strong><br>
-    <span style="color:#8b949e">Due: ${escapeHtml(deadlineStr)}</span>
+      <strong style="color:#00e5d4">${escapeHtml(task.title)}</strong><br>
+      <span style="color:#3a6070">DUE&nbsp;</span><span style="color:#b8d8e4">${escapeHtml(deadlineFmt)}</span><br>
+      <span style="color:#3a6070">ETA&nbsp;</span><span style="color:${secLeft < 0 ? '#ff3247' : secLeft < 21600 ? '#ff3247' : secLeft < 86400 ? '#ffb300' : '#00d68f'}">${etaStr}</span><br>
+      <span style="color:#3a6070">PRIORITY&nbsp;</span><span style="color:#ffb300">${task.importance}/5</span>
   `;
   const offset = 14;
   let left = x + offset;
@@ -106,7 +120,6 @@ function openAsteroidEdit(task: Task): void {
   if (!popup || !backdrop) return;
 
   const defaultDate = new Date(task.deadline * 1000).toISOString().slice(0, 10);
-  const defaultTime = new Date(task.deadline * 1000).toISOString().slice(11, 16);
 
   popup.innerHTML = `
     <h3>Edit Task</h3>
@@ -117,10 +130,6 @@ function openAsteroidEdit(task: Task): void {
     <div class="form-group">
       <label>Deadline</label>
       <input type="date" id="edit-deadline" value="${defaultDate}" />
-    </div>
-    <div class="form-group">
-      <label>Time</label>
-      <input type="time" id="edit-time" value="${defaultTime}" />
     </div>
     <div class="form-group">
       <label>Importance (1–5)</label>
@@ -141,9 +150,8 @@ function openAsteroidEdit(task: Task): void {
   const handleSave = (): void => {
     const title = (document.getElementById('edit-title') as HTMLInputElement)?.value?.trim() || task.title;
     const date = (document.getElementById('edit-deadline') as HTMLInputElement)?.value || defaultDate;
-    const time = (document.getElementById('edit-time') as HTMLInputElement)?.value || defaultTime;
     const importance = Math.max(1, Math.min(5, Number((document.getElementById('edit-importance') as HTMLInputElement)?.value) || 3));
-    const deadline = Math.floor(new Date(`${date}T${time}`).getTime() / 1000);
+    const deadline = Math.floor(new Date(`${date}T23:59:59`).getTime() / 1000);
     saveAndClose({ title, deadline, importance });
   };
 
@@ -249,7 +257,7 @@ export function initWallpaper(canvas: HTMLCanvasElement, onCollision?: (taskId: 
   dirLight.position.set(10, 10, 10);
   scene.add(dirLight);
 
-  createStarBackground(scene);
+  starBackground = createStarBackground(scene);
   planet = createPlanet(scene);
 
   function animate(currentTime: number) {
@@ -257,6 +265,7 @@ export function initWallpaper(canvas: HTMLCanvasElement, onCollision?: (taskId: 
     lastTime = currentTime;
     const now = Date.now() / 1000;
     const maxRadius = getResponsiveMaxRadius(camera);
+    updateStarBackground(starBackground, deltaSec, currentTime / 1000, camera);
 
     const targetScale = hoveredPlanet ? HOVER_SCALE : 1;
     planetScaleCurrent = THREE.MathUtils.lerp(planetScaleCurrent, targetScale, Math.min(1, deltaSec * PLANET_SCALE_LERP));
@@ -268,18 +277,14 @@ export function initWallpaper(canvas: HTMLCanvasElement, onCollision?: (taskId: 
       if (!task) return;
       if (hasCollided(task, now)) {
         scene.remove(asteroid.mesh);
-        asteroid.mesh.geometry.dispose();
-        (asteroid.mesh.material as THREE.Material).dispose();
+        scene.remove(asteroid.routeLine);
+        disposeAsteroidMesh(asteroid);
         asteroids.delete(taskId);
         onCollision?.(taskId);
         return;
       }
-      updateAsteroidPosition(asteroid, task, now, maxRadius, deltaSec);
       const isHovered = asteroid === hoveredAsteroid;
-      if (isHovered) {
-        const s = asteroid.mesh.scale.x;
-        asteroid.mesh.scale.setScalar(s * HOVER_SCALE);
-      }
+      updateAsteroidPosition(asteroid, task, now, maxRadius, deltaSec, isHovered);
     });
 
     updateHoverAndTooltip();
@@ -306,8 +311,8 @@ export function setTasks(tasks: Task[]): void {
   asteroids.forEach((asteroid, taskId) => {
     if (!ids.has(taskId)) {
       scene.remove(asteroid.mesh);
-      asteroid.mesh.geometry.dispose();
-      (asteroid.mesh.material as THREE.Material).dispose();
+      scene.remove(asteroid.routeLine);
+      disposeAsteroidMesh(asteroid);
       asteroids.delete(taskId);
     }
   });
@@ -328,6 +333,7 @@ export function setTasks(tasks: Task[]): void {
       const asteroid = createAsteroidMesh(task, index, totalTasks);
       (asteroid.mesh.userData as { task?: Task }).task = task;
       scene.add(asteroid.mesh);
+      scene.add(asteroid.routeLine);
       asteroids.set(task.id, asteroid);
     }
   });
@@ -347,9 +353,13 @@ export function stopWallpaper(): void {
   document.getElementById('asteroid-edit-backdrop')?.classList.remove('open');
   asteroids.forEach((a) => {
     scene.remove(a.mesh);
-    a.mesh.geometry.dispose();
-    (a.mesh.material as THREE.Material).dispose();
+    scene.remove(a.routeLine);
+    disposeAsteroidMesh(a);
   });
   asteroids.clear();
+  if (starBackground) {
+    scene.remove(starBackground.group);
+    disposeStarBackground(starBackground);
+  }
   renderer?.dispose();
 }

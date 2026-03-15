@@ -14,8 +14,38 @@ interface TaskItemProps {
   ) => void;
 }
 
+function urgencyClass(deadline: number): string {
+  const secLeft = deadline - Date.now() / 1000;
+  if (secLeft < 0) return 'urgency-overdue';
+  if (secLeft < 3600 * 6) return 'urgency-critical';
+  if (secLeft < 3600 * 24) return 'urgency-warning';
+  return '';
+}
+
 function formatDeadline(ts: number): string {
-  return new Date(ts * 1000).toLocaleString();
+  const d = new Date(ts * 1000);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(-2);
+  return `${dd}/${mm}/${yy}`;
+}
+
+function formatTimeRemaining(ts: number): string {
+  const secLeft = ts - Date.now() / 1000;
+  if (secLeft < 0) return 'OVERDUE';
+  const days = Math.floor(secLeft / 86400);
+  const hours = Math.floor((secLeft % 86400) / 3600);
+  return `T−${String(days).padStart(2, '0')}D ${String(hours).padStart(2, '0')}H`;
+}
+
+function ImportancePips({ value }: { value: number }) {
+  return (
+    <div className="importance-bar">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <div key={n} className={`importance-pip${n <= value ? ' active' : ''}`} />
+      ))}
+    </div>
+  );
 }
 
 export function TaskItem({
@@ -30,11 +60,11 @@ export function TaskItem({
   const [title, setTitle] = useState(task.title);
   const [importance, setImportance] = useState(task.importance);
   const [deadline, setDeadline] = useState(
-    new Date(task.deadline * 1000).toISOString().slice(0, 16)
+    new Date(task.deadline * 1000).toISOString().slice(0, 10)
   );
 
   const handleSave = () => {
-    const d = Math.floor(new Date(deadline).getTime() / 1000);
+    const d = Math.floor(new Date(`${deadline}T23:59:59`).getTime() / 1000);
     onEdit(task.id, { title, importance, deadline: d });
     onEndEdit();
   };
@@ -55,7 +85,7 @@ export function TaskItem({
           onChange={(e) => setImportance(Number(e.target.value))}
         />
         <input
-          type="datetime-local"
+          type="date"
           value={deadline}
           onChange={(e) => setDeadline(e.target.value)}
         />
@@ -67,18 +97,21 @@ export function TaskItem({
     );
   }
 
+  const urg = urgencyClass(task.deadline);
   return (
-    <li className="task-item">
-      <span className="title">{task.title}</span>
+    <li className={`task-item${urg ? ' ' + urg : ''}`}>
+      <div className="task-item-header">
+        <span className="title">{task.title}</span>
+        <ImportancePips value={task.importance} />
+      </div>
       <span className="meta">
-        Importance: {task.importance} · Due: {formatDeadline(task.deadline)}
+        DUE&nbsp;<span className="deadline-value">{formatDeadline(task.deadline)}</span>
+        &nbsp;&nbsp;ETA&nbsp;<span className="deadline-value">{formatTimeRemaining(task.deadline)}</span>
       </span>
       <div className="actions">
-        <button onClick={onComplete}>Complete</button>
-        <button onClick={onStartEdit}>Edit</button>
-        <button onClick={onDelete} className="delete">
-          Delete
-        </button>
+        <button onClick={onComplete}>&#9689; CONFIRM</button>
+        <button onClick={onStartEdit}>&#9998; EDIT</button>
+        <button onClick={onDelete} className="delete">&#10005; DESTROY</button>
       </div>
     </li>
   );
