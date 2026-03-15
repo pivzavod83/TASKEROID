@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Taskeroid — Organise your tasks to reach the stars</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Archivo+Black&display=swap" rel="stylesheet" />
+    <style>
+      /*
+        Taskeroid landing page
+        - Dark space theme
+        - Starfield + shooting stars every ~10s
+        - Solar-system planets
+        - Intro animation: elements rise from bottom/center into place
+      */
+
+      :root {
+        --bg0: #05060a;
+        --bg1: #080a12;
+        --text: rgba(255, 255, 255, 0.96);
+        --muted: rgba(255, 255, 255, 0.92);
+        --blue: #3aa3ff;
+        --blue2: #2b67ff;
+        --stroke: rgba(150, 185, 255, 0.18);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        /* night-sky look */
+        background:
+          radial-gradient(1200px 700px at 50% -10%, rgba(92, 120, 255, 0.18) 0%, rgba(0, 0, 0, 0) 55%),
+          radial-gradient(900px 600px at 15% 20%, rgba(80, 190, 255, 0.10) 0%, rgba(0, 0, 0, 0) 60%),
+          radial-gradient(900px 600px at 80% 35%, rgba(180, 90, 255, 0.08) 0%, rgba(0, 0, 0, 0) 62%),
+          linear-gradient(180deg, #050613 0%, #02030b 60%, #010108 100%);
+        color: var(--text);
+        font-family: "Cormorant Garamond", "Garamond", "Times New Roman", serif;
+        overflow: hidden;
+      }
+
+      /* Background layers */
+      .space {
+        position: relative;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+        isolation: isolate;
+      }
+
+      /* Star DOM layer (lots of stars, guaranteed visible) */
+      .star {
+        position: absolute;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 1);
+        box-shadow:
+          0 0 10px rgba(210, 235, 255, 0.55),
+          0 0 26px rgba(160, 210, 255, 0.22);
+        opacity: var(--a);
+        width: var(--s);
+        height: var(--s);
+      }
+
+      .star.twinkle {
+        animation: twinkle var(--t) ease-in-out infinite alternate;
+      }
+
+      @keyframes twinkle {
+        0% {
+          opacity: calc(var(--a) * 0.55);
+          transform: scale(0.92);
+        }
+        100% {
+          opacity: var(--a);
+          transform: scale(1);
+        }
+      }
+
+      /* vignette and subtle noise */
+      .vignette {
+        position: absolute;
+        inset: 0;
+        z-index: 3;
+        pointer-events: none;
+        background:
+          radial-gradient(1100px 760px at 50% 25%, rgba(24, 32, 75, 0.0) 0%, rgba(0, 0, 0, 0.62) 100%),
+          linear-gradient(180deg, rgba(0, 0, 0, 0.18) 0%, rgba(0, 0, 0, 0.62) 100%);
+      }
+
+      .noise {
+        position: absolute;
+        inset: 0;
+        z-index: 4;
+        pointer-events: none;
+        opacity: 0.06;
+        mix-blend-mode: overlay;
+        background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/></filter><rect width="160" height="160" filter="url(%23n)" opacity="0.55"/></svg>');
+      }
+
+      /* Solar system bodies */
+      .planet {
+        position: absolute;
+        border-radius: 999px;
+        z-index: 2;
+        filter: drop-shadow(0 28px 70px rgba(0, 0, 0, 0.55)) saturate(1.1);
+        animation: drift var(--dur) ease-in-out infinite alternate;
+        opacity: 0.98;
+      }
+
+      .planet::after {
+        content: "";
+        position: absolute;
+        inset: -14px;
+        border-radius: 999px;
+        background: radial-gradient(circle at 30% 35%, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 58%);
+      }
+
+      @keyframes drift {
+        0% {
+          transform: translate3d(0, 0, 0);
+        }
+        100% {
+          transform: translate3d(var(--dx), var(--dy), 0);
+        }
+      }
+
+      /* Sun */
+      .planet.sun {
+        width: 220px;
+        height: 220px;
+        left: -95px;
+        top: 10vh;
+        --dur: 20s;
+        --dx: 36px;
+        --dy: 16px;
+        background: radial-gradient(circle at 60% 55%, #ffe07a 0%, #ffb84a 28%, #ff6a2a 56%, #1b0b08 100%);
+        box-shadow: 0 0 90px rgba(255, 170, 60, 0.22);
+      }
+
+      /* Mercury */
+      .planet.mercury {
+        width: 120px;
+        height: 120px;
+        left: 10vw;
+        top: 14vh;
+        --dur: 26s;
+        --dx: 26px;
+        --dy: -12px;
+        background: radial-gradient(circle at 60% 55%, #f6f0e8 0%, #b8a99a 30%, #6f625a 62%, #141216 100%);
+        opacity: 0.88;
+      }
+
+      /* Earth */
+      .planet.earth {
+        width: 190px;
+        height: 190px;
+        right: 6vw;
+        top: 9vh;
+        --dur: 28s;
+        --dx: -28px;
+        --dy: 18px;
+        background: radial-gradient(circle at 60% 55%, #7cf3ff 0%, #2b8cff 25%, #113e96 55%, #050c20 100%);
+      }
+
+      .planet.earth::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 999px;
+        background: radial-gradient(circle at 40% 40%, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 55%);
+        opacity: 1;
+        filter: blur(0.2px);
+      }
+
+      /* Mars */
+      .planet.mars {
+        width: 140px;
+        height: 140px;
+        right: -35px;
+        bottom: 22vh;
+        --dur: 30s;
+        --dx: -28px;
+        --dy: -18px;
+        background: radial-gradient(circle at 60% 55%, #ffd0b9 0%, #ff7a45 28%, #b4371a 56%, #1a0706 100%);
+        opacity: 0.86;
+      }
+
+      /* Jupiter */
+      .planet.jupiter {
+        width: 320px;
+        height: 320px;
+        right: -120px;
+        bottom: -140px;
+        --dur: 32s;
+        --dx: -55px;
+        --dy: -26px;
+        background: radial-gradient(circle at 60% 55%, #fff0d8 0%, #e1b07a 26%, #9a6a40 55%, #27170f 100%);
+        opacity: 0.62;
+      }
+
+      .planet.jupiter::before {
+        content: "";
+        position: absolute;
+        inset: 18px;
+        border-radius: 999px;
+        background: radial-gradient(circle at 55% 60%, rgba(0, 0, 0, 0.16) 0%, rgba(0, 0, 0, 0) 55%);
+        mix-blend-mode: multiply;
+        opacity: 0.5;
+      }
+
+      /* Header font */
+      .title {
+        margin: 0;
+        font-size: clamp(160px, 20vw, 256px);
+        letter-spacing: 0.01em;
+        line-height: 0.98;
+        text-shadow:
+          0 2px 0 rgba(255, 255, 255, 0.08),
+          0 14px 32px rgba(0, 0, 0, 0.62),
+          0 0 26px rgba(255, 255, 255, 0.16);
+        color: #fff;
+        font-family: "Archivo Black", system-ui, -apple-system, "Segoe UI", sans-serif;
+        letter-spacing: 0.02em;
+      }
+
+      .title span {
+        display: inline-block;
+        color: #ffffff;
+        text-shadow:
+          0 1px 0 rgba(255, 255, 255, 0.14),
+          0 14px 0 rgba(0, 0, 0, 0.35),
+          0 26px 42px rgba(0, 0, 0, 0.65);
+      }
+
+      .tagline {
+        margin: 18px 0 0;
+        font-size: clamp(26px, 3.1vw, 42px);
+        font-family: "Archivo Black", system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: #ffffff;
+        letter-spacing: 0.01em;
+      }
+
+      /* Content */
+      .content {
+            display: flex
+;
+    justify-content: center;
+    align-items: center;
+    width: 100vw;
+    height: 100vh;
+      }
+
+      .titleBlockBox {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .titleBlock {
+        position: relative;
+        margin-top: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 350px;
+      }
+
+      .ctaRow {
+        /* keep buttons near the centered block */
+        position: relative;
+        top: 0;
+        margin-top: 30px;
+        display: flex;
+        justify-content: center;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+
+      .btn {
+        appearance: none;
+        border: 1px solid rgba(0, 0, 0, 0.10);
+        /* bone / mild white */
+        background: linear-gradient(180deg, rgba(248, 243, 232, 0.92), rgba(238, 231, 216, 0.82));
+        color: rgba(14, 18, 28, 0.92);
+        font-family: "Archivo Black", system-ui, -apple-system, "Segoe UI", sans-serif;
+        border-radius: 18px;
+        padding: 14px 18px;
+        font-size: 18px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 230px;
+        justify-content: center;
+        text-decoration: none;
+        box-shadow: 0 22px 56px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.40);
+        transition:
+          transform 300ms cubic-bezier(0.2, 0.9, 0.2, 1),
+          background 260ms ease,
+          box-shadow 260ms ease,
+          border-color 260ms ease,
+          filter 260ms ease;
+        will-change: transform;
+      }
+
+      .btn#btnMac,
+      .btn#btnWin {
+        background: linear-gradient(180deg, rgba(248, 243, 232, 0.92), rgba(238, 231, 216, 0.82));
+      }
+
+      .btn:hover {
+        transform: translateY(-2px) scale(1.065);
+        box-shadow: 0 28px 72px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+        border-color: rgba(0, 0, 0, 0.16);
+        filter: saturate(1.02);
+      }
+
+      .btn svg {
+        width: 18px;
+        height: 18px;
+        fill: rgba(14, 18, 28, 0.92);
+        filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.18));
+      }
+
+      .btn img.icon {
+        width: 18px;
+        height: 18px;
+        object-fit: contain;
+      }
+
+      /* hide old fine print */
+      .fine {
+        display: none;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .planet,
+        .shooting-star,
+        .intro,
+        .star.twinkle {
+          animation: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="space" id="space">
+      <div class="starLayer" id="starLayer" aria-hidden="true"></div>
+      <div class="planet sun" aria-hidden="true"></div>
+      <div class="planet mercury" aria-hidden="true"></div>
+      <div class="planet earth" aria-hidden="true"></div>
+      <div class="planet mars" aria-hidden="true"></div>
+      <div class="planet jupiter" aria-hidden="true"></div>
+      <div class="shooting-layer" id="shootingLayer" aria-hidden="true"></div>
+      <div class="vignette" aria-hidden="true"></div>
+      <div class="noise" aria-hidden="true"></div>
+
+      <main class="content">
+        <section class="hero" role="region" aria-label="Taskeroid downloads">
+          <div class="titleBlock">
+              <div class="titleBlockBox">
+                  <h1 class="title intro delay1"><span>Taskeroid</span></h1>
+                  <p class="tagline intro delay2">Organise your tasks to reach the stars</p>
+                </div>
+            <div class="ctaRow intro delay3">
+              <a class="btn" id="btnMac" href="#" download>
+                <img src="icons/apple.png" alt="Apple" class="icon">
+                Download for macOS
+              </a>
+              <a class="btn" id="btnWin" href="#" download>
+                <img src="icons/windows.png" alt="Windows" class="icon">
+                Download for Windows
+              </a>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      // Create a dense night sky full of stars (DOM-based so it's always visible)
+      (function makeStars() {
+        const layer = document.getElementById('starLayer');
+        if (!layer) return;
+
+        const count = Math.min(3200, Math.floor((window.innerWidth * window.innerHeight) / 260));
+        const frag = document.createDocumentFragment();
+
+        for (let i = 0; i < count; i++) {
+          const s = document.createElement('div');
+          s.className = 'star twinkle';
+
+          const big = Math.random() < 0.22;
+          const size = (big ? 1.5 : 0.9) + Math.random() * (big ? 2.8 : 1.2);
+          const alpha = (big ? 0.55 : 0.22) + Math.random() * (big ? 0.45 : 0.55);
+          const tw = 1.2 + Math.random() * 3.4;
+
+          s.style.left = (Math.random() * 100).toFixed(3) + 'vw';
+          s.style.top = (Math.random() * 100).toFixed(3) + 'vh';
+          s.style.setProperty('--s', size.toFixed(2) + 'px');
+          s.style.setProperty('--a', alpha.toFixed(3));
+          s.style.setProperty('--t', tw.toFixed(2) + 's');
+
+          frag.appendChild(s);
+        }
+
+        layer.innerHTML = '';
+        layer.appendChild(frag);
+      })();
+
+      // Download URL placeholders
+      const DOWNLOADS = {
+        mac: 'downloads/Taskeroid-mac.dmg',
+        win: 'downloads/Taskeroid-windows.exe'
+      };
+
+      const btnMac = document.getElementById('btnMac');
+      const btnWin = document.getElementById('btnWin');
+      btnMac.href = DOWNLOADS.mac;
+      btnWin.href = DOWNLOADS.win;
+
+      // Shooting stars: one every ~10 seconds at different locations
+      const layer = document.getElementById('shootingLayer');
+
+      function spawnShootingStar() {
+        const star = document.createElement('div');
+        star.className = 'shooting-star';
+
+        // Random start location (prefer upper half for realism)
+        const startX = Math.random() * window.innerWidth * 0.85;
+        const startY = Math.random() * window.innerHeight * 0.55;
+
+        // Random trajectory
+        const angle = -20 - Math.random() * 25; // degrees
+        const tx = 260 + Math.random() * 520;
+        const ty = 140 + Math.random() * 360;
+
+        star.style.left = `${startX}px`;
+        star.style.top = `${startY}px`;
+        star.style.setProperty('--angle', `${angle}deg`);
+        star.style.setProperty('--tx', `${tx}px`);
+        star.style.setProperty('--ty', `${ty}px`);
+
+        layer.appendChild(star);
+
+        // Cleanup
+        star.addEventListener('animationend', () => {
+          star.remove();
+        });
+      }
+
+      setTimeout(spawnShootingStar, 1100);
+      setInterval(() => {
+        spawnShootingStar();
+      }, 10000);
+
+      // Rebuild stars on resize (throttled)
+      let resizeTimer;
+      window.addEventListener('resize', () => {
+        window.clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(() => {
+          // rebuild stars to match viewport
+          const sl = document.getElementById('starLayer');
+          if (sl) sl.innerHTML = '';
+          (function makeStars() {
+            const layer = document.getElementById('starLayer');
+            if (!layer) return;
+
+            const count = Math.min(3200, Math.floor((window.innerWidth * window.innerHeight) / 260));
+            const frag = document.createDocumentFragment();
+
+            for (let i = 0; i < count; i++) {
+              const s = document.createElement('div');
+              s.className = 'star twinkle';
+
+              const big = Math.random() < 0.22;
+              const size = (big ? 1.5 : 0.9) + Math.random() * (big ? 2.8 : 1.2);
+              const alpha = (big ? 0.55 : 0.22) + Math.random() * (big ? 0.45 : 0.55);
+              const tw = 1.2 + Math.random() * 3.4;
+
+              s.style.left = (Math.random() * 100).toFixed(3) + 'vw';
+              s.style.top = (Math.random() * 100).toFixed(3) + 'vh';
+              s.style.setProperty('--s', size.toFixed(2) + 'px');
+              s.style.setProperty('--a', alpha.toFixed(3));
+              s.style.setProperty('--t', tw.toFixed(2) + 's');
+
+              frag.appendChild(s);
+            }
+
+            layer.appendChild(frag);
+          })();
+
+          spawnShootingStar();
+        }, 250);
+      });
+    </script>
+  </body>
+</html>
