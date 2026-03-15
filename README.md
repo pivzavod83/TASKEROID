@@ -14,10 +14,9 @@
 <br/>
 
 ```
-◈ ─────────────────────────────────────────────────────────── ◈
+◈ ──────────────────────────────────────────────────────────────────── ◈
     EVERY TASK IS AN ASTEROID. EVERY DEADLINE IS ORBITAL PRESSURE.
-              YOUR PLANET IS THE MISSION. SURVIVE.
-◈ ─────────────────────────────────────────────────────────── ◈
+◈ ──────────────────────────────────────────────────────────────────── ◈
 ```
 
 </div>
@@ -62,28 +61,28 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │  BRANCH: app-dev          [ WINDOWS ][ ELECTRON ][ THREE.JS ]   │
 ├─────────────────────────────────────────────────────────────────┤
-│  Windows Desktop Application                                     │
-│  Full interactive Taskeroid experience.                          │
-│  Electron + Three.js + React.                                    │
-│  The complete orbital command interface for Windows operators.   │
+│  Windows Desktop Application                                    │
+│  Full interactive Taskeroid experience.                         │
+│  Electron + Three.js + React.                                   │
+│  The complete orbital command interface for Windows operators.  │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
 │  BRANCH: wb-dev            [ PUBLIC WEB ][ LANDING ]            │
 ├─────────────────────────────────────────────────────────────────┤
-│  Public Website                                                  │
+│  Public Website                                                 │
 │  Discovery and distribution surface.                            │
 │  Where new operators find Taskeroid, read the briefing,         │
-│  and acquire available apps.                                     │
+│  and acquire available apps.                                    │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
 │  BRANCH: mac-dev           [ MACOS ][ WALLPAPER ]               │
 ├─────────────────────────────────────────────────────────────────┤
-│  macOS Wallpaper Experience                                      │
-│  Visual command interface tailored for Mac.                      │
-│  The orbital field as your desktop.                              │
-│  Your mission always in view.                                    │
+│  macOS Wallpaper Experience                                     │
+│  Visual command interface tailored for Mac.                     │
+│  The orbital field as your desktop.                             │
+│  Your mission always in view.                                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
