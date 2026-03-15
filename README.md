@@ -1,103 +1,43 @@
 # Taskeroid
 
-A desktop application that combines an **animated wallpaper** with a **task management system**. Tasks appear as asteroids approaching a planet—each asteroid represents a to-do item, with its size showing importance and its distance showing time until the deadline.
+Taskeroid is a cinematic way to manage your time.
 
-## Overview
+Instead of a flat to-do list, your work becomes a living space simulation: every task is an asteroid, every deadline is orbital pressure, and your planet is the mission that has to survive.
 
-- **Wallpaper Renderer**: Runs automatically at startup, displays a space scene with a central planet and task-asteroids moving toward it
-- **Task Manager UI**: Opens when you launch the app again or click the system tray icon
+The closer the deadline, the closer the asteroid gets.
+The higher the importance, the bigger the threat.
 
-## Tech Stack
+You do not just track tasks. You command a system under pressure.
 
-- **Electron** – desktop shell
-- **Three.js** – WebGL rendering for the wallpaper
-- **React** – Task Manager UI
-- **TypeScript**
-- **SQLite** (better-sqlite3) – task storage
+## Why It Is Different
 
-## Project Structure
+- Visual urgency: deadlines feel real because you can see them closing in
+- Priority at a glance: important tasks are physically larger
+- Focus mode: isolate one mission and dim the noise
+- Dependency chains: block tasks until prerequisite work is done
+- Repeat logic: daily and weekly tasks regenerate automatically
+- Immersive UI: futuristic HUD panel, interactive planet, animated completion effects
 
-```
-taskeroid/
-├── src/
-│   ├── main/           # Electron main process
-│   ├── database/       # SQLite schema and CRUD
-│   ├── models/         # Task type definitions
-│   ├── physics/        # Asteroid position/size calculations
-│   ├── renderer/       # Three.js wallpaper scene and loop
-│   ├── preload/        # IPC bridge scripts
-│   └── ui/             # React task manager
-├── assets/             # Tray icon (add tray-icon.png for custom icon)
-├── wallpaper.html      # Wallpaper window
-├── ui.html             # Task Manager window
-└── package.json
-```
+Taskeroid is built for people who want productivity to feel dynamic, not administrative.
 
-## Running the App
+## Repository Branches
 
-### Prerequisites
+This repository is organized into three active branches, each with a clear product role:
 
-- Node.js 18+
-- npm
+- app-dev
+  - Windows desktop Taskeroid app (Electron + Three.js + React)
+  - This is the branch for the full interactive Windows experience
 
-### Install and run
+- wb-dev
+  - Public website
+  - Landing and distribution surface where users can discover Taskeroid and download available apps
 
-```bash
-cd taskeroid
-npm install
-npm start
-```
+- mac-dev
+  - macOS wallpaper-focused version
+  - Visual experience tailored for Mac users
 
-**Demo mode**:
+## Where To Go Next
 
-```bash
-npm start -- --demo
-```
+Pick the branch that matches what you want to run or contribute to.
 
-### Build scripts
-
-- `npm run build` – compile TypeScript and bundle renderer/UI
-- `npm start` – build and run the app
-- `npm run build:wallpaper` – build only the wallpaper bundle
-- `npm run build:ui` – build only the UI bundle
-
-## Usage
-
-1. **Start the app** – The wallpaper window opens in fullscreen.
-2. **Open Task Manager** – Click the system tray icon or run the app again (second instance).
-3. **Add tasks** – Use the Task Manager to add tasks with title, importance (1–5), and deadline.
-4. **Tasks as asteroids** – Each task appears as an asteroid in the wallpaper, moving toward the planet until the deadline.
-
-## Task Data Model
-
-| Field      | Type    | Required | Description                         |
-|-----------|---------|----------|-------------------------------------|
-| id        | string  | yes      | Unique identifier                   |
-| title     | string  | yes      | Task name                           |
-| importance| 1–5     | yes      | Controls asteroid size              |
-| deadline  | number  | yes      | Unix timestamp                      |
-| created_at| number  | yes      | Creation timestamp                  |
-| completed | boolean | yes      | Whether the task is completed       |
-
-## Asteroid Physics
-
-- **Position**: Linear motion from max radius toward the planet
-- **Formula**: `distance = max_radius * (1 - progress)` where  
-  `progress = (now - created_at) / (deadline - created_at)`
-- **Size**: Importance 1 → small, 5 → large
-
-## Startup at Login
-
-By default, the app does not run at login. To enable automatic wallpaper at startup, change `openAtLogin: false` to `true` in `src/main/index.ts`:
-
-```typescript
-app.setLoginItemSettings({ openAtLogin: true });
-```
-
-Then rebuild and run the app.
-
-## Platform Notes
-
-- **Windows**: System tray icon appears; second instance opens the Task Manager.
-- **macOS**: Same behavior; tray in menu bar.
-- **Linux**: Tray may be skipped on some environments.
+Setup and installation details are intentionally documented inside each branch so instructions stay accurate for that specific target.
